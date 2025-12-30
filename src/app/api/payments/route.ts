@@ -21,11 +21,50 @@ export async function GET(req: NextRequest) {
 
         const isAdmin = orgRole === "org:admin"
 
-        // Fetch payments from Supabase (trusting the database status)
-        const { data: supabasePayments, error } = await supabase
+        // 1. Fetch booths belonging to this organization
+        if (!orgId) return NextResponse.json({ error: "Organization ID required" }, { status: 400 })
+
+        const { data: booths, error: boothsError } = await supabase
+            .from('booths')
+            .select('id')
+            .eq('organization_id', orgId)
+
+        if (boothsError) {
+            console.error("Supabase error fetching booths:", boothsError)
+            return NextResponse.json({ error: "Failed to fetch organization booths" }, { status: 500 })
+        }
+
+        const boothIds = booths.map(b => b.id)
+
+        // 2. Fetch payments for these booths
+        let query = supabase
             .from('payments')
             .select('*')
             .order('created_at', { ascending: false })
+
+        // If org has booths, filter by them. If no booths, return empty (or filter by empty list)
+        if (boothIds.length > 0) {
+            query = query.in('booth_id', boothIds)
+        } else {
+            // No booths = no payments for this org
+            // We can just return empty here or let the query run with empty IN clause (which might fail or return all depending on implementation)
+            // Safer to just return empty result immediately
+            return NextResponse.json({
+                payments: [],
+                count: 0,
+                totalRevenue: 0,
+                paidCount: 0,
+                isAdmin,
+                userRevenueSharePercent: 80, // Default to show something
+                netRevenue: 0,
+                orgCut: 0,
+                memberBreakdown: [],
+                avgOrgPercent: 20,
+                estimatedOrgEarnings: 0
+            })
+        }
+
+        const { data: supabasePayments, error } = await query
 
         if (error) {
             console.error("Supabase error fetching payments:", error)

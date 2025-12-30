@@ -56,13 +56,41 @@ function calculateQuartiles(values: number[]): { q1: number; q2: number; q3: num
 
 export async function GET() {
     try {
-        const { userId } = await auth()
+        const { userId, orgId } = await auth()
         if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+        if (!orgId) return NextResponse.json({ error: "Organization ID required" }, { status: 400 })
 
-        // Fetch all payments from Supabase
+        // 1. Fetch booths for this org
+        const { data: booths, error: boothsError } = await supabase
+            .from('booths')
+            .select('id')
+            .eq('organization_id', orgId)
+
+        if (boothsError) {
+            console.error("Supabase error fetching booths for analytics:", boothsError)
+            return NextResponse.json({ error: "Failed to fetch organization data" }, { status: 500 })
+        }
+
+        const boothIds = booths.map(b => b.id)
+
+        // If no booths, return empty data structure immediately
+        if (boothIds.length === 0) {
+            return NextResponse.json({
+                summary: { totalTransactions: 0, paidTransactions: 0, totalRevenue: 0, successRate: 0 },
+                transactionStats: { mean: 0, median: 0, variance: 0, standardDeviation: 0, coefficientOfVariation: 0, quartiles: { q1: 0, q2: 0, q3: 0, iqr: 0 }, min: 0, max: 0, range: 0 },
+                dailyAnalysis: { data: [], dailyMean: 0, dailyStdDev: 0, outlierDays: [] },
+                hourlyDistribution: Array.from({ length: 24 }, (_, i) => ({ hour: i, label: `${String(i).padStart(2, '0')}:00`, transactions: 0, revenue: 0 })),
+                peakHour: { hour: 0, label: '00:00', transactions: 0, revenue: 0 },
+                amountDistribution: [], // bucket structure is static but empty counts
+                performance: { last7Days: { transactions: 0, revenue: 0 }, previous7Days: { transactions: 0, revenue: 0 }, revenueGrowth: 0, transactionGrowth: 0 }
+            })
+        }
+
+        // 2. Fetch payments for these booths
         const { data: payments, error } = await supabase
             .from('payments')
             .select('*')
+            .in('booth_id', boothIds)
             .order('created_at', { ascending: false })
 
         if (error) {

@@ -55,11 +55,6 @@ const data = {
       icon: IconListDetails,
     },
     {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-    },
-    {
       title: "Members",
       url: "/dashboard/members",
       icon: IconUsers,

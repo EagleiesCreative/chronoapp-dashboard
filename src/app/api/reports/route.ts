@@ -155,15 +155,36 @@ async function generateReportAsync(
         const periodEnd = endDate || new Date(year, month, 0, 23, 59, 59).toISOString()
 
         // Fetch payments data - only PAID/SETTLED transactions (exclude PENDING)
-        // Note: payments table doesn't have organization_id, filtering by booth would require a join
-        const { data: payments, error: paymentsError } = await supabase
-            .from('payments')
-            .select('*')
-            .in('status', ['PAID', 'SETTLED', 'paid', 'settled']) // Only include completed payments
-            .gte('created_at', periodStart)
-            .lte('created_at', periodEnd)
-            .order('created_at', { ascending: false })
-            .limit(maxTransactions)
+        // 1. Fetch booths for this org
+        const { data: booths, error: boothsError } = await supabase
+            .from('booths')
+            .select('id')
+            .eq('organization_id', orgId)
+
+        if (boothsError) throw boothsError
+
+        const boothIds = booths.map(b => b.id)
+
+        // If no booths, return empty logic (short circuit)
+        let payments: any[] = []
+        if (boothIds.length > 0) {
+            // 2. Fetch payments for these booths - only PAID/SETTLED
+            const { data, error } = await supabase
+                .from('payments')
+                .select('*')
+                .in('booth_id', boothIds)
+                .in('status', ['PAID', 'SETTLED', 'paid', 'settled']) // Only include completed payments
+                .gte('created_at', periodStart)
+                .lte('created_at', periodEnd)
+                .order('created_at', { ascending: false })
+                .limit(maxTransactions)
+
+            if (error) throw error
+            payments = data || []
+        }
+
+        // No error thrown if no booths, just empty payments list
+        const paymentsError = null
 
         if (paymentsError) throw paymentsError
 

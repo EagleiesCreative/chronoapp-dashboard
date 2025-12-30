@@ -15,13 +15,37 @@ interface SupabasePayment {
 
 export async function GET() {
     try {
-        const { userId } = await auth()
+        const { userId, orgId } = await auth()
         if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+        if (!orgId) return NextResponse.json({ error: "Organization ID required" }, { status: 400 })
 
-        // Fetch payments from Supabase
+        // 1. Fetch booths for this org
+        const { data: booths, error: boothsError } = await supabase
+            .from('booths')
+            .select('id')
+            .eq('organization_id', orgId)
+
+        if (boothsError) {
+            console.error("Supabase error fetching booths for dashboard stats:", boothsError)
+            return NextResponse.json({ error: "Failed to fetch organization data" }, { status: 500 })
+        }
+
+        const boothIds = booths.map(b => b.id)
+
+        // If no booths, return empty stats immediately
+        if (boothIds.length === 0) {
+            return NextResponse.json({
+                stats: { totalRevenue: 0, paidCount: 0, pendingCount: 0, expiredCount: 0, successRate: 0, totalTransactions: 0 },
+                chartData: [],
+                recentTransactions: []
+            })
+        }
+
+        // 2. Fetch payments for these booths
         const { data: payments, error } = await supabase
             .from('payments')
             .select('*')
+            .in('booth_id', boothIds)
             .order('created_at', { ascending: false })
 
         if (error) {
