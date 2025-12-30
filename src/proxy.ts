@@ -60,8 +60,15 @@ const isProtectedRoute = createRouteMatcher([
 
 // 3. Proxy (formerly Middleware)
 export default clerkMiddleware(async (auth, req) => {
-  // Apply Rate Limiting to API routes only
-  if (req.nextUrl.pathname.startsWith('/api')) {
+  const pathname = req.nextUrl.pathname;
+
+  // Skip processing for Sentry tunnel route to prevent connection resets
+  if (pathname === '/monitoring') {
+    return; // Let the request pass through without interference
+  }
+
+  // Apply Rate Limiting to API routes only (excluding webhooks)
+  if (pathname.startsWith('/api') && !pathname.startsWith('/api/webhooks')) {
     // Use IP or 'anonymous' as key
     const ip = req.headers.get("x-forwarded-for") || "anonymous";
 
