@@ -2,18 +2,19 @@
 
 import { OrganizationSwitcher, SignedIn, OrganizationList } from "@clerk/nextjs"
 import { useOrganization } from "@clerk/nextjs"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { IconUserPlus, IconUsers, IconMail, IconTrash, IconCrown } from "@tabler/icons-react"
+import { IconUserPlus, IconUsers, IconMail, IconTrash, IconCrown, IconPercentage, IconLoader } from "@tabler/icons-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Slider } from "@/components/ui/slider"
 
 export default function MembersPage() {
   const { isLoaded, organization, membership, invitations, memberships } = useOrganization({
@@ -28,13 +29,37 @@ export default function MembersPage() {
       infinite: false,
     }
   })
-  
+
   const [isCreating, setIsCreating] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
   const [inviteRole, setInviteRole] = useState<"org:admin" | "org:member">("org:member")
   const [isInviteOpen, setIsInviteOpen] = useState(false)
   const [isInviting, setIsInviting] = useState(false)
   const [emailError, setEmailError] = useState("")
+
+  // Revenue share state (per-member)
+  const [memberShares, setMemberShares] = useState<Record<string, number>>({})
+  const [isSavingShare, setIsSavingShare] = useState<string | null>(null)
+  const [isLoadingShare, setIsLoadingShare] = useState(true)
+
+  // Fetch revenue share settings for all members
+  useEffect(() => {
+    const fetchRevenueShare = async () => {
+      if (!organization?.id) return
+      try {
+        const res = await fetch('/api/orgs/revenue-share')
+        const data = await res.json()
+        if (data.memberShares) {
+          setMemberShares(data.memberShares)
+        }
+      } catch (error) {
+        console.error("Error fetching revenue share:", error)
+      } finally {
+        setIsLoadingShare(false)
+      }
+    }
+    fetchRevenueShare()
+  }, [organization?.id])
 
   // Email validation helper
   const validateEmail = (email: string): boolean => {
@@ -79,7 +104,7 @@ export default function MembersPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <OrganizationList 
+              <OrganizationList
                 hidePersonal
                 afterSelectOrganizationUrl="/dashboard/members"
                 afterCreateOrganizationUrl="/dashboard/members"
@@ -176,6 +201,33 @@ export default function MembersPage() {
     }
   }
 
+  const saveRevenueShare = async (memberId: string, percent: number) => {
+    setIsSavingShare(memberId)
+    try {
+      const res = await fetch('/api/orgs/revenue-share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, clientPercent: percent })
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        console.error('API Error Response:', data)
+        throw new Error(data.error || data.details || 'Failed to save')
+      }
+
+      // Update local state
+      setMemberShares(prev => ({ ...prev, [memberId]: percent }))
+      toast.success("Revenue share updated!")
+    } catch (error: any) {
+      console.error("Error saving revenue share:", error)
+      toast.error(error.message || "Failed to update revenue share")
+    } finally {
+      setIsSavingShare(null)
+    }
+  }
+
   return (
     <SignedIn>
       <div className="flex flex-col gap-6 p-4 md:p-6">
@@ -192,13 +244,13 @@ export default function MembersPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <OrganizationSwitcher 
+            <OrganizationSwitcher
               hidePersonal
-              appearance={{ 
-                elements: { 
-                  organizationSwitcherTrigger: "!h-9 !rounded-md !border" 
-                } 
-              }} 
+              appearance={{
+                elements: {
+                  organizationSwitcherTrigger: "!h-9 !rounded-md !border"
+                }
+              }}
             />
             <Button variant="outline" onClick={() => setIsCreating(true)}>
               Create New
@@ -317,67 +369,110 @@ export default function MembersPage() {
                   {memberships?.data?.map((member) => {
                     const userData = member.publicUserData
                     if (!userData) return null
-                    
+                    const userId = userData.userId || member.id
+                    const currentShare = memberShares[userId] ?? 80
+
                     return (
-                      <div key={member.id} className="flex items-center justify-between border-b py-4 last:border-0">
-                        <div className="flex items-center gap-3">
-                          <Avatar>
-                            <AvatarImage src={userData.imageUrl} />
-                            <AvatarFallback>
-                              {userData.firstName?.[0]}
-                              {userData.lastName?.[0]}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">
-                              {userData.firstName} {userData.lastName}
-                            </p>
-                            <p className="text-sm text-muted-foreground">
-                              {userData.identifier}
-                            </p>
+                      <div key={member.id} className="border-b py-4 last:border-0">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <Avatar>
+                              <AvatarImage src={userData.imageUrl} />
+                              <AvatarFallback>
+                                {userData.firstName?.[0]}
+                                {userData.lastName?.[0]}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div>
+                              <p className="font-medium">
+                                {userData.firstName} {userData.lastName}
+                              </p>
+                              <p className="text-sm text-muted-foreground">
+                                {userData.identifier}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Select
+                              value={member.role}
+                              onValueChange={(value) => handleUpdateRole(member.id, value as "org:admin" | "org:member")}
+                            >
+                              <SelectTrigger className="w-28">
+                                <SelectValue placeholder="Select a role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="org:member">Member</SelectItem>
+                                <SelectItem value="org:admin">Admin</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {isAdmin && userData.userId !== membership?.publicUserData?.userId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={async () => {
+                                  if (confirm('Remove this member?')) {
+                                    try {
+                                      const res = await fetch('/api/orgs/member', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ orgId: organization?.id, memberId: member.id, action: 'remove' })
+                                      })
+
+                                      if (!res.ok) throw new Error('Remove failed')
+
+                                      toast.success("Member removed successfully!")
+                                      await organization?.getMemberships()
+                                    } catch (error) {
+                                      console.error("Error removing member:", error)
+                                      toast.error("Failed to remove member.")
+                                    }
+                                  }
+                                }}
+                              >
+                                <IconTrash className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Select
-                            value={member.role}
-                            onValueChange={(value) => handleUpdateRole(member.id, value as "org:admin" | "org:member")}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a role" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="org:member">Member</SelectItem>
-                              <SelectItem value="org:admin">Admin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          {isAdmin && userData.userId !== membership?.publicUserData?.userId && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={async () => {
-                                if (confirm('Remove this member?')) {
-                                  try {
-                                    const res = await fetch('/api/orgs/member', {
-                                      method: 'POST',
-                                      headers: { 'Content-Type': 'application/json' },
-                                      body: JSON.stringify({ orgId: organization?.id, memberId: member.id, action: 'remove' })
-                                    })
 
-                                    if (!res.ok) throw new Error('Remove failed')
-
-                                    toast.success("Member removed successfully!")
-                                    await organization?.getMemberships()
-                                  } catch (error) {
-                                    console.error("Error removing member:", error)
-                                    toast.error("Failed to remove member.")
-                                  }
-                                }
-                              }}
-                            >
-                              <IconTrash className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
+                        {/* Revenue Share for non-admin members */}
+                        {isAdmin && member.role === "org:member" && (
+                          <div className="mt-4 ml-12 p-4 rounded-lg bg-muted/50">
+                            <div className="flex items-center gap-2 mb-3">
+                              <IconPercentage className="h-4 w-4 text-primary" />
+                              <span className="text-sm font-medium">Revenue Share</span>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="flex-1">
+                                <Slider
+                                  value={[currentShare]}
+                                  onValueChange={(value) => {
+                                    setMemberShares(prev => ({ ...prev, [userId]: value[0] }))
+                                  }}
+                                  max={100}
+                                  min={0}
+                                  step={5}
+                                  className="w-full"
+                                />
+                                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                                  <span>Client: <span className="font-semibold text-primary">{currentShare}%</span></span>
+                                  <span>Org: <span className="font-semibold">{100 - currentShare}%</span></span>
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => saveRevenueShare(userId, currentShare)}
+                                disabled={isSavingShare === userId}
+                              >
+                                {isSavingShare === userId ? (
+                                  <IconLoader className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  "Save"
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -445,6 +540,25 @@ export default function MembersPage() {
 
           {isAdmin && (
             <TabsContent value="settings" className="space-y-4">
+              {/* Note about per-member revenue share */}
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center gap-2">
+                    <IconPercentage className="h-5 w-5 text-primary" />
+                    <div>
+                      <CardTitle>Revenue Share Settings</CardTitle>
+                      <CardDescription>Revenue share is now set per-member in the Members tab</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Go to the <strong>Members</strong> tab to set individual revenue share percentages for each client member.
+                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Organization Settings */}
               <Card>
                 <CardHeader>
                   <CardTitle>Organization Settings</CardTitle>

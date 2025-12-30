@@ -334,10 +334,10 @@ export default function BoothsPage() {
             <Input
               id="price"
               type="number"
-              step="0.01"
+              step="1000"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="0.00"
+              placeholder="0"
             />
           </div>
         </div>
@@ -395,7 +395,7 @@ export default function BoothsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              ${displayBooths.reduce((sum, b) => sum + b.price, 0).toFixed(2)}
+              {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(displayBooths.reduce((sum, b) => sum + b.price, 0))}
             </div>
           </CardContent>
         </Card>
@@ -439,7 +439,7 @@ export default function BoothsPage() {
                         </span>
                         <span className="flex items-center gap-1">
                           <IconCurrencyDollar className="h-3 w-3" />
-                          ${booth.price.toFixed(2)}
+                          {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(booth.price)}
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground">

@@ -31,9 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50 dark:bg-black`}
+          suppressHydrationWarning
         >
           <SignedOut>
             <header className="flex items-center justify-between p-4 border-b">

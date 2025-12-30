@@ -14,10 +14,13 @@ import {
   IconHelp,
   IconInnerShadowTop,
   IconListDetails,
+  IconPhoto,
   IconReport,
   IconSearch,
   IconSettings,
+  IconCreditCard,
   IconUsers,
+  IconDeviceDesktop,
 } from "@tabler/icons-react"
 
 import { NavDocuments } from "@/components/nav-documents"
@@ -52,11 +55,6 @@ const data = {
       icon: IconListDetails,
     },
     {
-      title: "Analytics",
-      url: "#",
-      icon: IconChartBar,
-    },
-    {
       title: "Projects",
       url: "#",
       icon: IconFolder,
@@ -65,6 +63,16 @@ const data = {
       title: "Members",
       url: "/dashboard/members",
       icon: IconUsers,
+    },
+    {
+      title: "Device Status",
+      url: "/dashboard/device-status",
+      icon: IconDeviceDesktop,
+    },
+    {
+      title: "Gallery",
+      url: "/dashboard/gallery",
+      icon: IconPhoto,
     },
   ],
   navClouds: [
@@ -118,7 +126,7 @@ const data = {
   navSecondary: [
     {
       title: "Settings",
-      url: "#",
+      url: "/dashboard/settings",
       icon: IconSettings,
     },
     {
@@ -134,19 +142,19 @@ const data = {
   ],
   documents: [
     {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
+      name: "Analytics",
+      url: "/dashboard/analytics",
+      icon: IconChartBar,
     },
     {
       name: "Reports",
-      url: "#",
+      url: "/dashboard/reports",
       icon: IconReport,
     },
     {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
+      name: "Payments",
+      url: "/dashboard/payments",
+      icon: IconCreditCard,
     },
   ],
 }
@@ -251,7 +259,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarContent>
         {mounted ? (
           <>
-            <NavMain items={filteredNavMain} />
+            <NavMain items={filteredNavMain} isAdmin={isAdmin} />
             <NavDocuments items={data.documents} />
             <NavSecondary items={data.navSecondary} className="mt-auto" />
           </>

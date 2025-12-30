@@ -262,7 +262,7 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     <Input
                                         id="edit-price"
                                         type="number"
-                                        step="0.01"
+                                        step="1000"
                                         value={price}
                                         onChange={(e) => setPrice(e.target.value)}
                                     />
@@ -484,7 +484,7 @@ function VoucherManager({ boothId }: { boothId: string }) {
                                 <div>
                                     <div className="font-medium">{v.code}</div>
                                     <div className="text-sm text-muted-foreground">
-                                        {v.discount_type === 'fixed' ? `$${v.discount_amount}` : `${v.discount_amount}%`} off
+                                        {v.discount_type === 'fixed' ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' }).format(v.discount_amount) : `${v.discount_amount}%`} off
                                         {v.max_uses && ` • ${v.used_count}/${v.max_uses} used`}
                                     </div>
                                 </div>
