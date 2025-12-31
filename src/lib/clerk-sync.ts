@@ -4,28 +4,57 @@ import { supabase } from "./supabase-server"
 
 /**
  * Sync a Clerk user to Supabase
+ * Handles the case where the same email exists with different Clerk IDs (dev vs prod)
  */
 export async function syncUserToSupabase(userId: string) {
   try {
     const client = await clerkClient()
     const user = await client.users.getUser(userId)
+    const email = user.emailAddresses[0]?.emailAddress || ''
 
-    const { error } = await supabase
+    // First, check if a user with this email already exists (possibly from different Clerk environment)
+    const { data: existingUser } = await supabase
       .from('users')
-      .upsert({
-        id: user.id,
-        email: user.emailAddresses[0]?.emailAddress || '',
-        first_name: user.firstName || '',
-        last_name: user.lastName || '',
-        image_url: user.imageUrl || '',
-        updated_at: new Date().toISOString()
-      }, {
-        onConflict: 'id'
-      })
+      .select('id')
+      .eq('email', email)
+      .maybeSingle()
 
-    if (error) {
-      console.error('Error syncing user to Supabase:', error)
-      return { success: false, error }
+    if (existingUser && existingUser.id !== user.id) {
+      // User exists with different ID (dev vs prod) - update the ID and other fields
+      const { error } = await supabase
+        .from('users')
+        .update({
+          id: user.id,
+          first_name: user.firstName || '',
+          last_name: user.lastName || '',
+          image_url: user.imageUrl || '',
+          updated_at: new Date().toISOString()
+        })
+        .eq('email', email)
+
+      if (error) {
+        console.error('Error updating user ID in Supabase:', error)
+        return { success: false, error }
+      }
+    } else {
+      // Normal upsert by ID
+      const { error } = await supabase
+        .from('users')
+        .upsert({
+          id: user.id,
+          email,
+          first_name: user.firstName || '',
+          last_name: user.lastName || '',
+          image_url: user.imageUrl || '',
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'id'
+        })
+
+      if (error) {
+        console.error('Error syncing user to Supabase:', error)
+        return { success: false, error }
+      }
     }
 
     return { success: true, userId: user.id }
@@ -127,16 +156,16 @@ export async function syncAllOrgMembersToSupabase(orgId: string) {
       memberships.data.map(async (membership) => {
         const userId = membership.publicUserData?.userId
         if (!userId) return { success: false, error: 'No user ID' }
-        
+
         return syncMembershipToSupabase(orgId, userId)
       })
     )
 
     const successful = results.filter(r => r.status === 'fulfilled').length
-    return { 
-      success: true, 
-      synced: successful, 
-      total: memberships.data.length 
+    return {
+      success: true,
+      synced: successful,
+      total: memberships.data.length
     }
   } catch (err) {
     console.error('Failed to sync org members:', err)

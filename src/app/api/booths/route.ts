@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from '@/lib/supabase-server'
-import { syncUserToSupabase } from '@/lib/clerk-sync'
+import { syncUserToSupabase, syncOrganizationToSupabase } from '@/lib/clerk-sync'
 
 async function ensureUniqueBoothCode(candidate: string): Promise<string> {
   // Check for existing booth_code globally; regenerate up to N times
@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // We no longer sync Clerk->Supabase on every request. Ensure webhooks are configured for real-time sync.
+    // Sync organization to Supabase before creating booth (handles dev vs prod ID differences)
+    await syncOrganizationToSupabase(orgId)
 
     // Ensure booth_code uniqueness
     const uniqueCode = await ensureUniqueBoothCode(booth_code)
