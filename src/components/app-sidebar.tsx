@@ -236,13 +236,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <div className="flex items-center gap-2">
                 <OrganizationSwitcher
                   hidePersonal
+                  hideSlug
                   appearance={{
                     elements: {
                       rootBox: "w-full",
                       organizationSwitcherTrigger: "w-full flex items-center gap-2 p-2 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
                       organizationPreviewTextContainer: "flex-1 truncate text-left",
                       organizationPreviewAvatarBox: "size-5 shrink-0",
-                      organizationSwitcherPopoverActionButton: !isAdmin ? "hidden" : undefined
+                      organizationSwitcherPopoverActionButton: !isAdmin ? "hidden" : undefined,
+                      // Hide "Create organization" button for all users
+                      organizationSwitcherPopoverActionButton__createOrganization: "hidden",
                     }
                   }}
                 />
