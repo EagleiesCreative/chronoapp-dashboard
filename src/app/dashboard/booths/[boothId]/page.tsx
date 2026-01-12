@@ -27,6 +27,7 @@ interface Booth {
     price: number
     booth_code: string
     assigned_to?: string
+    app_pin?: string
 }
 
 interface Member {
@@ -55,6 +56,7 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
     const [dslrboothPass, setDslrboothPass] = useState("")
     const [price, setPrice] = useState("")
     const [assignedTo, setAssignedTo] = useState("")
+    const [appPin, setAppPin] = useState("")
 
     const isAdmin = membership?.role === "org:admin"
 
@@ -83,6 +85,7 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                 setDslrboothPass(foundBooth.dslrbooth_pass)
                 setPrice(foundBooth.price.toString())
                 setAssignedTo(foundBooth.assigned_to || "")
+                setAppPin(foundBooth.app_pin || "")
             } else {
                 toast.error("Booth not found")
                 router.push("/dashboard/booths")
@@ -140,7 +143,8 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                     dslrbooth_api: dslrboothApi,
                     dslrbooth_pass: dslrboothPass,
                     price: parseFloat(price),
-                    assigned_to: assignedPayload
+                    assigned_to: assignedPayload,
+                    app_pin: appPin || null
                 })
             })
 
@@ -270,6 +274,61 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                 <div className="flex justify-end">
                                     <Button onClick={handleSave} disabled={saving}>
                                         {saving ? 'Saving...' : 'Save Changes'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="mt-6">
+                        <CardHeader>
+                            <CardTitle>App Security</CardTitle>
+                            <CardDescription>
+                                Set a PIN to secure booth app access.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-6">
+                                <div className="flex flex-col gap-3">
+                                    <Label>App PIN (6 digits)</Label>
+                                    <div className="flex gap-2">
+                                        {[0, 1, 2, 3, 4, 5].map((index) => (
+                                            <Input
+                                                key={index}
+                                                id={`pin-${index}`}
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={1}
+                                                className="w-14 h-14 text-center text-2xl font-semibold"
+                                                value={appPin[index] || ''}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/\D/g, '')
+                                                    if (value) {
+                                                        const newPin = appPin.split('')
+                                                        newPin[index] = value
+                                                        setAppPin(newPin.join(''))
+                                                        // Auto-focus next input
+                                                        if (index < 5) {
+                                                            document.getElementById(`pin-${index + 1}`)?.focus()
+                                                        }
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Backspace' && !appPin[index] && index > 0) {
+                                                        // Focus previous input on backspace
+                                                        document.getElementById(`pin-${index - 1}`)?.focus()
+                                                    }
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                        This PIN will be required to access the booth app
+                                    </p>
+                                </div>
+                                <div className="flex justify-end">
+                                    <Button onClick={handleSave} disabled={saving}>
+                                        {saving ? 'Saving...' : 'Save PIN'}
                                     </Button>
                                 </div>
                             </div>

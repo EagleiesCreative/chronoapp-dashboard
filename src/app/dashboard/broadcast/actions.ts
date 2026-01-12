@@ -80,8 +80,11 @@ export async function getBroadcasts() {
         .order('created_at', { ascending: false })
 
     if (error) {
-        console.error("Supabase fetch error:", error)
-        throw new Error("Failed to fetch broadcasts")
+        console.error("Supabase fetch error:", JSON.stringify(error, null, 2))
+        console.error("Error code:", error.code)
+        console.error("Error message:", error.message)
+        console.error("Error details:", error.details)
+        throw new Error(`Failed to fetch broadcasts: ${error.message || 'Unknown error'}`)
     }
 
     return data

@@ -11,6 +11,7 @@ import {
   IconFileDescription,
   IconFileWord,
   IconFolder,
+  IconHeadset,
   IconHelp,
   IconInnerShadowTop,
   IconListDetails,
@@ -125,8 +126,18 @@ const data = {
       icon: IconSettings,
     },
     {
+      title: "Billing",
+      url: "/dashboard/billing",
+      icon: IconCreditCard,
+    },
+    {
+      title: "Support",
+      url: "/dashboard/support",
+      icon: IconHeadset,
+    },
+    {
       title: "Get Help",
-      url: "#",
+      url: "/dashboard/help",
       icon: IconHelp,
     },
     {
@@ -135,7 +146,7 @@ const data = {
       icon: IconSearch,
     },
   ],
-  documents: [
+  transactions: [
     {
       name: "Analytics",
       url: "/dashboard/analytics",
@@ -234,21 +245,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:p-1.5 hover:bg-transparent"
             >
               <div className="flex items-center gap-2">
-                <OrganizationSwitcher
-                  hidePersonal
-                  hideSlug
-                  appearance={{
-                    elements: {
-                      rootBox: "w-full",
-                      organizationSwitcherTrigger: "w-full flex items-center gap-2 p-2 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                      organizationPreviewTextContainer: "flex-1 truncate text-left",
-                      organizationPreviewAvatarBox: "size-5 shrink-0",
-                      organizationSwitcherPopoverActionButton: !isAdmin ? "hidden" : undefined,
-                      // Hide "Create organization" button for all users
-                      organizationSwitcherPopoverActionButton__createOrganization: "hidden",
-                    }
-                  }}
-                />
+                {mounted ? (
+                  <OrganizationSwitcher
+                    hidePersonal
+                    hideSlug
+                    appearance={{
+                      elements: {
+                        rootBox: "w-full",
+                        organizationSwitcherTrigger: "w-full flex items-center gap-2 p-2 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        organizationPreviewTextContainer: "flex-1 truncate text-left",
+                        organizationPreviewAvatarBox: "size-5 shrink-0",
+                        organizationSwitcherPopoverActionButton: !isAdmin ? "hidden" : undefined,
+                        // Hide "Create organization" button for all users
+                        organizationSwitcherPopoverActionButton__createOrganization: "hidden",
+                      }
+                    }}
+                  />
+                ) : (
+                  <div className="w-full flex items-center gap-2 p-2">
+                    <div className="size-5 shrink-0 rounded bg-muted/40 animate-pulse" />
+                    <div className="flex-1 h-4 rounded bg-muted/40 animate-pulse" />
+                  </div>
+                )}
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -258,7 +276,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         {mounted ? (
           <>
             <NavMain items={filteredNavMain} isAdmin={isAdmin} />
-            <NavDocuments items={data.documents} />
+            <NavDocuments items={data.transactions} />
             <NavSecondary items={data.navSecondary} className="mt-auto" />
           </>
         ) : (

@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
 import { validateAccountNumber } from "@/lib/xendit"
+import { encrypt, decrypt, maskBankAccount } from "@/lib/encryption"
 
 const EDIT_RESTRICTION_DAYS = 14
 
@@ -13,10 +14,10 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
         }
 
-        // Fetch user's payment info
+        // Fetch user's payment info (encrypted columns)
         const { data: user, error } = await supabase
             .from('users')
-            .select('bank_code, account_number, account_holder_name, payment_info_updated_at')
+            .select('bank_code, account_number_encrypted, account_holder_name_encrypted, account_number_last4, payment_info_updated_at')
             .eq('id', userId)
             .single()
 
@@ -26,7 +27,11 @@ export async function GET(req: NextRequest) {
         }
 
         // Check if user has payment info
-        const hasPaymentInfo = !!(user?.bank_code && user?.account_number && user?.account_holder_name)
+        const hasPaymentInfo = !!(user?.bank_code && user?.account_number_encrypted && user?.account_holder_name_encrypted)
+
+        // Decrypt for internal use, mask for display
+        const decryptedAccountNumber = user?.account_number_encrypted ? decrypt(user.account_number_encrypted) : ''
+        const decryptedHolderName = user?.account_holder_name_encrypted ? decrypt(user.account_holder_name_encrypted) : ''
 
         // Calculate if user can edit (14 days since last update)
         let canEdit = true
@@ -50,8 +55,9 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
             paymentInfo: hasPaymentInfo ? {
                 bankCode: user.bank_code,
-                accountNumber: user.account_number,
-                accountHolderName: user.account_holder_name,
+                accountNumber: decryptedAccountNumber, // Full number for user to see their own
+                accountNumberMasked: maskBankAccount(decryptedAccountNumber), // Masked version
+                accountHolderName: decryptedHolderName,
                 lastUpdated: user.payment_info_updated_at,
             } : null,
             canEdit,
@@ -96,7 +102,7 @@ export async function POST(req: NextRequest) {
         // Fetch current user data to check edit restriction
         const { data: currentUser, error: fetchError } = await supabase
             .from('users')
-            .select('bank_code, account_number, account_holder_name, payment_info_updated_at')
+            .select('bank_code, account_number_encrypted, account_holder_name_encrypted, payment_info_updated_at')
             .eq('id', userId)
             .single()
 
@@ -106,7 +112,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Check if user already has payment info
-        const hasExistingPaymentInfo = !!(currentUser?.bank_code && currentUser?.account_number && currentUser?.account_holder_name)
+        const hasExistingPaymentInfo = !!(currentUser?.bank_code && currentUser?.account_number_encrypted && currentUser?.account_holder_name_encrypted)
 
         // If updating existing payment info, check 14-day restriction
         if (hasExistingPaymentInfo && currentUser?.payment_info_updated_at) {
@@ -127,13 +133,19 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Update user's payment information
+        // Encrypt sensitive data before storing
+        const encryptedAccountNumber = encrypt(accountNumber)
+        const encryptedHolderName = encrypt(accountHolderName.toUpperCase())
+        const accountLast4 = accountNumber.slice(-4)
+
+        // Update user's payment information with encrypted data
         const { error: updateError } = await supabase
             .from('users')
             .update({
                 bank_code: bankCode,
-                account_number: accountNumber,
-                account_holder_name: accountHolderName.toUpperCase(),
+                account_number_encrypted: encryptedAccountNumber,
+                account_holder_name_encrypted: encryptedHolderName,
+                account_number_last4: accountLast4,
                 payment_info_updated_at: new Date().toISOString(),
             })
             .eq('id', userId)
@@ -153,7 +165,7 @@ export async function POST(req: NextRequest) {
                 : "Payment information saved successfully",
             paymentInfo: {
                 bankCode,
-                accountNumber,
+                accountNumberMasked: maskBankAccount(accountNumber),
                 accountHolderName: accountHolderName.toUpperCase(),
                 lastUpdated: new Date().toISOString(),
             }

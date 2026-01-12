@@ -98,6 +98,25 @@ export async function POST(req: NextRequest) {
     // Sync organization to Supabase before creating booth (handles dev vs prod ID differences)
     await syncOrganizationToSupabase(orgId)
 
+    // Check booth limit based on subscription plan
+    const { canCreateBooth } = await import('@/lib/features')
+    const boothLimit = await canCreateBooth(orgId)
+
+    if (!boothLimit.allowed) {
+      return NextResponse.json({
+        error: "Booth limit reached",
+        details: {
+          current: boothLimit.current,
+          max: boothLimit.max,
+          message: `You have reached your booth limit (${boothLimit.current}/${boothLimit.max}). Upgrade to Pro for up to 5 booths.`
+        },
+        upgrade_required: true
+      }, { status: 403 })
+    }
+
+    // Sync current user (creator) to Supabase
+    await syncUserToSupabase(userId)
+
     // Ensure booth_code uniqueness
     const uniqueCode = await ensureUniqueBoothCode(booth_code)
 
@@ -125,7 +144,11 @@ export async function POST(req: NextRequest) {
 
     if (error) {
       console.error('/api/booths POST supabase error', error)
-      return NextResponse.json({ error: 'Failed to create booth' }, { status: 500 })
+      return NextResponse.json({
+        error: 'Failed to create booth',
+        details: error.message,
+        code: error.code
+      }, { status: 500 })
     }
 
     return NextResponse.json(data)
@@ -138,7 +161,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { orgId, boothId, name, location, dslrbooth_api, dslrbooth_pass, price, assigned_to } = body
+    const { orgId, boothId, name, location, dslrbooth_api, dslrbooth_pass, price, assigned_to, app_pin } = body
     console.log('Updating booth:', { orgId, boothId, name, location, price, assigned_to })
 
     const { userId } = await auth()
@@ -168,7 +191,8 @@ export async function PUT(req: NextRequest) {
       location,
       dslrbooth_api: dslrbooth_api || '',
       dslrbooth_pass: dslrbooth_pass || '',
-      price: parseFloat(price)
+      price: parseFloat(price),
+      app_pin: app_pin || null
     }
 
     if (assigned_to !== undefined) {

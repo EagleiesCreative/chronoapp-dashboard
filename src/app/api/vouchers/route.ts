@@ -35,19 +35,25 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json()
-        const { boothId, code, discountAmount, discountType, maxUses, expiresAt } = body
+        const { boothId, code, discountAmount, discountType, maxUses, expiresAt, orgId } = body
 
         const { userId, orgRole } = await auth()
         if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
-        // Only admins can create vouchers (optional restriction, can be removed if members should also create)
-        // For now, let's assume members assigned to the booth can also create vouchers? 
-        // Or sticking to the previous rule where members can't edit assignee, maybe they can manage vouchers?
-        // Let's allow it for now, or check if they are assigned.
-        // Simplest is to allow if authenticated for now, or check org membership.
-
-        if (!boothId || !code || discountAmount === undefined) {
+        if (!boothId || !code || discountAmount === undefined || !orgId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+        }
+
+        // Check if organization has access to vouchers feature (Pro plan only)
+        const { hasFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+
+        if (!hasVouchers) {
+            return NextResponse.json({
+                error: "Upgrade required",
+                message: "Vouchers are only available on the Pro plan. Upgrade to create discount codes.",
+                upgrade_required: true
+            }, { status: 403 })
         }
 
         const { data, error } = await supabase
@@ -81,13 +87,25 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
     try {
         const body = await req.json()
-        const { id, code, discountAmount, discountType, maxUses, expiresAt } = body
+        const { id, code, discountAmount, discountType, maxUses, expiresAt, orgId } = body
 
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
-        if (!id || !code || discountAmount === undefined) {
+        if (!id || !code || discountAmount === undefined || !orgId) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+        }
+
+        // Check vouchers feature access
+        const { hasFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+
+        if (!hasVouchers) {
+            return NextResponse.json({
+                error: "Upgrade required",
+                message: "Vouchers are only available on the Pro plan.",
+                upgrade_required: true
+            }, { status: 403 })
         }
 
         const { data, error } = await supabase
@@ -122,12 +140,25 @@ export async function DELETE(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url)
         const id = searchParams.get('id')
+        const orgId = searchParams.get('orgId')
 
         const { userId } = await auth()
         if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
-        if (!id) {
-            return NextResponse.json({ error: "Voucher ID required" }, { status: 400 })
+        if (!id || !orgId) {
+            return NextResponse.json({ error: "Voucher ID and orgId required" }, { status: 400 })
+        }
+
+        // Check vouchers feature access
+        const { hasFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+
+        if (!hasVouchers) {
+            return NextResponse.json({
+                error: "Upgrade required",
+                message: "Vouchers are only available on the Pro plan.",
+                upgrade_required: true
+            }, { status: 403 })
         }
 
         const { error } = await supabase

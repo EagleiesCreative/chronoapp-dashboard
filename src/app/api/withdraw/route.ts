@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
 import { createPayout, BANK_CHANNEL_CODES, EWALLET_CHANNEL_CODES } from "@/lib/xendit"
+import { encrypt, maskBankAccount } from "@/lib/encryption"
 
 export async function POST(req: NextRequest) {
     try {
@@ -107,6 +108,11 @@ export async function POST(req: NextRequest) {
         // Generate unique reference ID
         const referenceId = `WD-${orgId.slice(-8)}-${userId.slice(-8)}-${Date.now()}`
 
+        // Encrypt sensitive bank data before storing
+        const encryptedAccountNumber = encrypt(accountNumber)
+        const encryptedHolderName = encrypt(accountHolderName)
+        const accountLast4 = accountNumber.slice(-4)
+
         // Store withdrawal record in Supabase with PENDING_APPROVAL status
         // Admin will approve and batch disburse later
         const { data: withdrawal, error: insertError } = await supabase
@@ -117,8 +123,9 @@ export async function POST(req: NextRequest) {
                 reference_id: referenceId,
                 amount: amount,
                 bank_code: bankCode,
-                account_number: accountNumber,
-                account_holder_name: accountHolderName,
+                account_number_encrypted: encryptedAccountNumber,
+                account_holder_name_encrypted: encryptedHolderName,
+                account_number_last4: accountLast4,
                 status: 'PENDING',
                 approval_status: 'PENDING_APPROVAL', // Requires admin approval
                 is_admin: isAdmin,
