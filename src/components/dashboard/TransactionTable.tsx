@@ -147,7 +147,6 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
     const [dateFilter, setDateFilter] = useState("")
     const [statusFilter, setStatusFilter] = useState("")
     const [showAll, setShowAll] = useState(false)
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
     const entriesPerPage = 5
 
@@ -204,34 +203,22 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
         return `${d.toLocaleString('default', { month: 'short' })} ${d.getDate()}`
     }
 
-    // ── Handlers ──
 
-    const toggleSelection = (id: string) => {
-        const newSet = new Set(selectedIds)
-        if (newSet.has(id)) {
-            newSet.delete(id)
-        } else {
-            newSet.add(id)
-        }
-        setSelectedIds(newSet)
-    }
-
-    const toggleSelectAll = () => {
-        if (selectedIds.size === displayedTransactions.length && displayedTransactions.length > 0) {
-            setSelectedIds(newSet => {
-                displayedTransactions.forEach(tx => newSet.delete(tx.id))
-                return new Set(newSet)
-            })
-        } else {
-            setSelectedIds(newSet => {
-                displayedTransactions.forEach(tx => newSet.add(tx.id))
-                return new Set(newSet)
-            })
-        }
-    }
 
     return (
         <div className="space-y-4">
+            {/* Info label */}
+            <div className="flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                    Showing the <span className="font-medium text-foreground">{filteredTransactions.length}</span> most recent transactions
+                </p>
+                <a
+                    href="/dashboard/payments"
+                    className="text-sm font-medium text-primary hover:underline"
+                >
+                    View all transactions →
+                </a>
+            </div>
             {/* Filter bar */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
@@ -302,22 +289,6 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
                 <table className="w-full min-w-[48rem] text-left">
                     <thead>
                         <tr className="border-b border-border bg-card">
-                            <th className="w-10 py-3 pl-4 pr-2">
-                                <input
-                                    type="checkbox"
-                                    checked={displayedTransactions.length > 0 && displayedTransactions.every(tx => selectedIds.has(tx.id))}
-                                    ref={input => {
-                                        if (input) {
-                                            const someSelected = displayedTransactions.some(tx => selectedIds.has(tx.id));
-                                            const allSelected = displayedTransactions.length > 0 && displayedTransactions.every(tx => selectedIds.has(tx.id));
-                                            input.indeterminate = someSelected && !allSelected;
-                                        }
-                                    }}
-                                    onChange={toggleSelectAll}
-                                    className="size-4 rounded border-gray-300 accent-primary-500"
-                                    aria-label="Select all displayed"
-                                />
-                            </th>
                             <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
                                 Payment ID
                             </th>
@@ -341,33 +312,23 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
                     <tbody>
                         {loading && displayedTransactions.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                                <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                                     <Loader2 className="mx-auto size-6 animate-spin" />
                                 </td>
                             </tr>
                         ) : displayedTransactions.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                                <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
                                     No transactions found matching your filters.
                                 </td>
                             </tr>
                         ) : (
                             displayedTransactions.map((tx) => {
-                                const isSelected = selectedIds.has(tx.id)
                                 return (
                                     <tr
                                         key={tx.id}
-                                        className={`transition-colors duration-150 border-none hover:bg-accent ${isSelected ? 'bg-primary/5' : 'odd:bg-card even:bg-secondary-50 dark:even:bg-accent'}`}
+                                        className="transition-colors duration-150 border-none hover:bg-accent odd:bg-card even:bg-secondary-50 dark:even:bg-accent"
                                     >
-                                        <td className="py-3 pl-4 pr-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={isSelected}
-                                                onChange={() => toggleSelection(tx.id)}
-                                                className="size-4 rounded border-border accent-primary-400"
-                                                aria-label={`Select ${tx.external_id}`}
-                                            />
-                                        </td>
                                         <td className="px-3 py-3 font-mono text-sm text-foreground">
                                             {tx.external_id || "N/A"}
                                         </td>

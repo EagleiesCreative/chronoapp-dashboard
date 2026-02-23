@@ -95,13 +95,13 @@ export async function GET() {
             .sort((a, b) => a.date.localeCompare(b.date))
             .slice(-30) // Last 30 days
 
-        // Get recent transactions (last 5 paid)
+        // Get recent transactions (last 15 paid)
         const recentTransactions = paymentsList
             .filter(p => {
                 const status = p.status?.toUpperCase()
                 return status === 'PAID' || status === 'SETTLED'
             })
-            .slice(0, 5)
+            .slice(0, 15)
             .map(p => ({
                 id: p.id,
                 external_id: p.xendit_invoice_id,

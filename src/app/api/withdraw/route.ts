@@ -123,11 +123,13 @@ export async function POST(req: NextRequest) {
                 reference_id: referenceId,
                 amount: amount,
                 bank_code: bankCode,
+                account_number: accountNumber,
+                account_holder_name: accountHolderName,
                 account_number_encrypted: encryptedAccountNumber,
                 account_holder_name_encrypted: encryptedHolderName,
                 account_number_last4: accountLast4,
                 status: 'PENDING',
-                approval_status: 'PENDING_APPROVAL', // Requires admin approval
+                approval_status: 'PENDING_APPROVAL',
                 is_admin: isAdmin,
             })
             .select()

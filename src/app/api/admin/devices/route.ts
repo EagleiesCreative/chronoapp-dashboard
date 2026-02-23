@@ -1,43 +1,61 @@
 import { NextResponse, NextRequest } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
-// The base URL from env (NEXT_PUBLIC_ so it can be shared, but this runs server-side)
+// The base URL from env (server-side proxy to avoid CORS)
 const BASE_URL = process.env.NEXT_PUBLIC_DEVICE_API_URL || "https://dev.eagleies.com/api"
-// API Key - use server-side env var (no NEXT_PUBLIC_ prefix for security)
-// Falls back to NEXT_PUBLIC_ version if the server-only version isn't set
+// API Key - prefer server-only env var, fall back to NEXT_PUBLIC_ version
 const API_KEY = process.env.DEVICE_API_KEY || process.env.NEXT_PUBLIC_DEVICE_API_KEY || ""
 
 export async function GET(req: NextRequest) {
     try {
-        // Construct the external URL
+        // 1. Authenticate with Clerk
+        const { userId, orgId } = await auth()
+        if (!userId) {
+            return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+        }
+
+        if (!orgId) {
+            return NextResponse.json({ error: "No organization selected" }, { status: 400 })
+        }
+
+        // 2. Construct the external URL
         const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL
         const endpoint = `${baseUrlClean}/admin/devices`
 
-        console.log(`Proxying request to: ${endpoint}`)
-
+        // 3. Fetch from external API
         const res = await fetch(endpoint, {
             method: "GET",
             headers: {
                 "Content-Type": "application/json",
                 ...(API_KEY ? { "X-API-Key": API_KEY } : {})
             },
-            // cache: 'no-store' // Ensure we get fresh data
+            cache: 'no-store'
         })
 
         if (!res.ok) {
-            console.error(`External API error: ${res.status} ${res.statusText}`)
-            return NextResponse.json(
-                { error: `Failed to fetch from external API: ${res.statusText}` },
-                { status: res.status }
-            )
+            const errorText = await res.text().catch(() => "Unknown error")
+            console.error(`/api/admin/devices GET - External API error: ${res.status} ${res.statusText}`, errorText)
+
+            // Return an empty but valid response so the page doesn't break
+            return NextResponse.json({
+                success: true,
+                summary: { total: 0, online: 0, offline: 0, never_connected: 0 },
+                devices: [],
+                _warning: `External device API returned ${res.status}`
+            })
         }
 
         const data = await res.json()
         return NextResponse.json(data)
-    } catch (error) {
-        console.error("Proxy error:", error)
-        return NextResponse.json(
-            { error: "Internal Server Error" },
-            { status: 500 }
-        )
+    } catch (error: any) {
+        console.error("/api/admin/devices GET error:", error?.message || error)
+
+        // Return empty valid response instead of error so page renders gracefully
+        return NextResponse.json({
+            success: true,
+            summary: { total: 0, online: 0, offline: 0, never_connected: 0 },
+            devices: [],
+            _warning: "Device API is currently unavailable"
+        })
     }
 }
