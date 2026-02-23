@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
             .from('users')
             .select('bank_code, account_number_encrypted, account_holder_name_encrypted, account_number_last4, payment_info_updated_at')
             .eq('id', userId)
-            .single()
+            .maybeSingle()
 
         if (error) {
             console.error("Error fetching payment info:", error)
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
             .from('users')
             .select('bank_code, account_number_encrypted, account_holder_name_encrypted, payment_info_updated_at')
             .eq('id', userId)
-            .single()
+            .maybeSingle()
 
         if (fetchError) {
             console.error("Error fetching user:", fetchError)
