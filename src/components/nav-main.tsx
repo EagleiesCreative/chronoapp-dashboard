@@ -80,7 +80,7 @@ export function NavMain({
             <SidebarMenuButton
               tooltip="Quick Create"
               onClick={handleQuickCreate}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear"
+              className="bg-primary text-gray-950 hover:bg-primary/90 hover:text-gray-950 active:bg-primary/90 active:text-gray-950 min-w-8 duration-200 ease-linear rounded-lg font-medium"
             >
               <IconCirclePlusFilled />
               <span>Quick Create</span>
@@ -108,6 +108,7 @@ export function NavMain({
                 asChild
                 tooltip={item.title}
                 isActive={isActive(item.url)}
+                className="data-[active=true]:bg-primary-500 data-[active=true]:text-gray-950 data-[active=true]:font-semibold rounded-lg transition-colors"
               >
                 <a href={item.url}>
                   {item.icon && <item.icon />}

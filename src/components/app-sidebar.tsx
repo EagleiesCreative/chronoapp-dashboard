@@ -236,41 +236,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   })
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              asChild
-              className="data-[slot=sidebar-menu-button]:p-1.5 hover:bg-transparent"
-            >
-              <div className="flex items-center gap-2">
-                {mounted ? (
-                  <OrganizationSwitcher
-                    hidePersonal
-                    hideSlug
-                    appearance={{
-                      elements: {
-                        rootBox: "w-full",
-                        organizationSwitcherTrigger: "w-full flex items-center gap-2 p-2 rounded-md hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                        organizationPreviewTextContainer: "flex-1 truncate text-left",
-                        organizationPreviewAvatarBox: "size-5 shrink-0",
-                        organizationSwitcherPopoverActionButton: !isAdmin ? "hidden" : undefined,
-                        // Hide "Create organization" button for all users
-                        organizationSwitcherPopoverActionButton__createOrganization: "hidden",
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="w-full flex items-center gap-2 p-2">
-                    <div className="size-5 shrink-0 rounded bg-muted/40 animate-pulse" />
-                    <div className="flex-1 h-4 rounded bg-muted/40 animate-pulse" />
-                  </div>
-                )}
-              </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+    <Sidebar collapsible="offcanvas" className="border-r border-sidebar-border bg-sidebar" {...props}>
+      <SidebarHeader className="bg-sidebar px-2 py-4">
+        <span className="px-2 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
+          Menu
+        </span>
       </SidebarHeader>
       <SidebarContent>
         {mounted ? (
@@ -293,6 +263,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <NavUser />
       </SidebarFooter>
-    </Sidebar>
+    </Sidebar >
   )
 }

@@ -4,6 +4,14 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "ztihgaxyczbcgmgqetyr.supabase.co",
+      },
+    ],
+  },
 };
 
 export default withSentryConfig(nextConfig, {

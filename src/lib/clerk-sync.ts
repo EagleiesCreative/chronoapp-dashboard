@@ -20,22 +20,44 @@ export async function syncUserToSupabase(userId: string) {
       .maybeSingle()
 
     if (existingUser && existingUser.id !== user.id) {
-      // User exists with different ID (dev vs prod) - update the ID and other fields
-      const { error } = await supabase
+      // User exists with a different Clerk ID (dev vs prod).
+      // Strategy: track affected booths → null FKs → delete old user → insert new → restore FKs.
+      const oldId = existingUser.id
+
+      // 0. Remember which booths reference the old user ID
+      const { data: createdBooths } = await supabase
+        .from('booths').select('id').eq('created_by', oldId)
+      const { data: assignedBooths } = await supabase
+        .from('booths').select('id').eq('assigned_to', oldId)
+      const createdIds = (createdBooths || []).map(b => b.id)
+      const assignedIds = (assignedBooths || []).map(b => b.id)
+
+      // 1. Null-out FKs so we can delete the old user row
+      if (createdIds.length) await supabase.from('booths').update({ created_by: null }).in('id', createdIds)
+      if (assignedIds.length) await supabase.from('booths').update({ assigned_to: null }).in('id', assignedIds)
+
+      // 2. Delete the stale old user row (now safe — no FKs reference it)
+      await supabase.from('users').delete().eq('id', oldId)
+
+      // 3. Insert the new user row (email unique constraint is now free)
+      const { error: insertErr } = await supabase
         .from('users')
-        .update({
+        .upsert({
           id: user.id,
+          email,
           first_name: user.firstName || '',
           last_name: user.lastName || '',
           image_url: user.imageUrl || '',
           updated_at: new Date().toISOString()
-        })
-        .eq('email', email)
-
-      if (error) {
-        console.error('Error updating user ID in Supabase:', error)
-        return { success: false, error }
+        }, { onConflict: 'id' })
+      if (insertErr) {
+        console.error('Error inserting new user row:', insertErr)
+        return { success: false, error: insertErr }
       }
+
+      // 4. Restore FK references to point to the new user ID
+      if (createdIds.length) await supabase.from('booths').update({ created_by: user.id }).in('id', createdIds)
+      if (assignedIds.length) await supabase.from('booths').update({ assigned_to: user.id }).in('id', assignedIds)
     } else {
       // Normal upsert by ID
       const { error } = await supabase

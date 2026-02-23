@@ -1,5 +1,5 @@
 import { NextResponse, NextRequest } from "next/server"
-import { auth, currentUser } from "@clerk/nextjs/server"
+import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
 
 interface SessionPhoto {
@@ -28,8 +28,15 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "No organization selected" }, { status: 400 })
         }
 
-        // Fetch sessions with final_image_url, joined with booths for organization filtering
-        const { data: sessions, error } = await supabase
+        // Pagination parameters
+        const searchParams = req.nextUrl.searchParams
+        const page = parseInt(searchParams.get("page") || "1")
+        const limit = parseInt(searchParams.get("limit") || "50")
+        const start = (page - 1) * limit
+        const end = start + limit - 1
+
+        // Use count to get total number of items
+        const { data: sessions, error, count } = await supabase
             .from('sessions')
             .select(`
                 id,
@@ -41,10 +48,11 @@ export async function GET(req: NextRequest) {
                     name,
                     organization_id
                 )
-            `)
+            `, { count: 'exact' })
             .not('final_image_url', 'is', null)
             .eq('booths.organization_id', orgId)
             .order('created_at', { ascending: false })
+            .range(start, end)
 
         if (error) {
             console.error("Supabase error fetching gallery:", error)
@@ -92,12 +100,15 @@ export async function GET(req: NextRequest) {
             })
             .sort((a, b) => b.date.localeCompare(a.date)) // Newest first
 
-        const totalPhotos = sessions?.length || 0
+        const totalPhotos = count || 0
+        const hasMore = end < totalPhotos - 1
 
         return NextResponse.json({
             folders: dateFolders,
             totalPhotos,
-            totalFolders: dateFolders.length
+            totalFolders: dateFolders.length,
+            hasMore,
+            nextPage: hasMore ? page + 1 : null
         })
     } catch (err) {
         console.error("/api/gallery GET error", err)

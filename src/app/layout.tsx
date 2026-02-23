@@ -6,6 +6,7 @@ import {
   SignUpButton,
   SignedOut,
 } from "@clerk/nextjs";
+import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -33,28 +34,30 @@ export default function RootLayout({
     <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <body
-          className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50 dark:bg-black`}
+          className={`${geistSans.variable} ${geistMono.variable} antialiased`}
           suppressHydrationWarning
         >
-          <SignedOut>
-            <header className="flex items-center justify-between p-4 border-b">
-              <h1 className="text-lg font-semibold">ChronoSnap Backoffice</h1>
-              <div className="flex items-center gap-2">
-                <SignInButton mode="modal">
-                  <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                    Sign In
-                  </button>
-                </SignInButton>
-                <SignUpButton mode="modal">
-                  <button className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50">
-                    Sign Up
-                  </button>
-                </SignUpButton>
-              </div>
-            </header>
-          </SignedOut>
-          {children}
-          <Toaster richColors position="top-right" />
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+            <SignedOut>
+              <header className="flex items-center justify-between p-4 border-b">
+                <h1 className="text-lg font-semibold">ChronoSnap Backoffice</h1>
+                <div className="flex items-center gap-2">
+                  <SignInButton mode="modal">
+                    <button className="px-4 py-2 bg-primary-400 text-gray-950 rounded-lg font-medium hover:bg-primary-500 transition-colors">
+                      Sign In
+                    </button>
+                  </SignInButton>
+                  <SignUpButton mode="modal">
+                    <button className="px-4 py-2 border border-border rounded-lg hover:bg-accent transition-colors">
+                      Sign Up
+                    </button>
+                  </SignUpButton>
+                </div>
+              </header>
+            </SignedOut>
+            {children}
+            <Toaster richColors position="top-right" />
+          </ThemeProvider>
         </body>
       </html>
     </ClerkProvider>

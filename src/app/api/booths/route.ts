@@ -115,7 +115,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Sync current user (creator) to Supabase
-    await syncUserToSupabase(userId)
+    const syncResult = await syncUserToSupabase(userId)
+    if (!syncResult.success) {
+      console.error('/api/booths POST: user sync failed', syncResult.error)
+      return NextResponse.json({ error: 'Failed to sync user to database. Please try again.' }, { status: 500 })
+    }
 
     // Ensure booth_code uniqueness
     const uniqueCode = await ensureUniqueBoothCode(booth_code)
