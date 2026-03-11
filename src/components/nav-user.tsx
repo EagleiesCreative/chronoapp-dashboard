@@ -1,20 +1,14 @@
 "use client"
 
-import { useUser, SignOutButton, useClerk } from "@clerk/nextjs"
+import { useUser, SignOutButton, useClerk, useOrganization } from "@clerk/nextjs"
 import * as React from "react"
 import {
   IconCreditCard,
-  IconDotsVertical,
+  IconUserCircle,
   IconLogout,
   IconNotification,
-  IconUserCircle,
 } from "@tabler/icons-react"
 
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +20,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
-  SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
@@ -37,9 +30,9 @@ const ROLE_TS_KEY = 'chrono:userRoleTS'
 export function NavUser() {
   const { isMobile } = useSidebar()
   const { user } = useUser()
+  const { organization } = useOrganization()
   const { openUserProfile } = useClerk()
 
-  // Clear cached role on sign-out to avoid stale role being used across sessions
   React.useEffect(() => {
     if (!user) {
       try {
@@ -59,49 +52,42 @@ export function NavUser() {
     openUserProfile()
   }
 
+  const displayName = organization?.name || user.fullName || user.firstName || user.emailAddresses[0]?.emailAddress || "Guest"
+  const initials = displayName.charAt(0).toUpperCase()
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              size="lg"
-              className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-            >
-              <Avatar className="h-8 w-8 rounded-lg grayscale">
-                <AvatarImage src={user.imageUrl} alt={user.fullName || user.emailAddresses[0]?.emailAddress || ''} />
-                <AvatarFallback className="rounded-lg">
-                  {user.firstName?.[0]}{user.lastName?.[0]}
-                </AvatarFallback>
-              </Avatar>
-              <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">
-                  {user.fullName || user.firstName || user.emailAddresses[0]?.emailAddress}
-                </span>
-                <span className="text-muted-foreground truncate text-xs">
-                  {user.emailAddresses[0]?.emailAddress}
-                </span>
+          <DropdownMenuTrigger className="w-full outline-none">
+            <div className="flex items-center gap-2.5 px-5 py-3 cursor-pointer transition-colors hover:bg-primary/5 rounded-none border-t border-border">
+              <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 border border-primary/30 font-sans text-[0.9rem] font-medium text-primary">
+                {initials}
               </div>
-              <IconDotsVertical className="ml-auto size-4" />
-            </SidebarMenuButton>
+              <div className="flex flex-1 flex-col items-start min-w-0">
+                <div className="font-mono text-[0.68rem] text-foreground truncate w-full text-left">
+                  {displayName}
+                </div>
+                <div className="font-mono text-[0.58rem] tracking-[0.1em] uppercase text-primary/70 mt-[2px]">
+                  Studio Plan
+                </div>
+              </div>
+            </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent
-            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+            className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg bg-card border-border"
             side={isMobile ? "bottom" : "right"}
             align="end"
             sideOffset={4}
           >
             <DropdownMenuLabel className="p-0 font-normal">
-              <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarImage src={user.imageUrl} alt={user.fullName || user.emailAddresses[0]?.emailAddress || ''} />
-                  <AvatarFallback className="rounded-lg">
-                    {user.firstName?.[0]}{user.lastName?.[0]}
-                  </AvatarFallback>
-                </Avatar>
+              <div className="flex items-center gap-2.5 px-3 py-2 text-left text-sm">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/15 border border-primary/30 font-sans text-[0.9rem] font-medium text-primary">
+                  {initials}
+                </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">
-                    {user.fullName || user.firstName || user.emailAddresses[0]?.emailAddress}
+                  <span className="truncate font-medium text-foreground">
+                    {displayName}
                   </span>
                   <span className="text-muted-foreground truncate text-xs">
                     {user.emailAddresses[0]?.emailAddress}
@@ -109,26 +95,26 @@ export function NavUser() {
                 </div>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator className="bg-border" />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={handleAccountClick}>
-                <IconUserCircle />
+              <DropdownMenuItem onClick={handleAccountClick} className="cursor-pointer">
+                <IconUserCircle className="mr-2 size-4" />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconCreditCard />
+              <DropdownMenuItem className="cursor-pointer">
+                <IconCreditCard className="mr-2 size-4" />
                 Billing
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                <IconNotification />
+              <DropdownMenuItem className="cursor-pointer">
+                <IconNotification className="mr-2 size-4" />
                 Notifications
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem asChild className="cursor-pointer text-destructive focus:bg-destructive/10 focus:text-destructive">
               <SignOutButton>
                 <button className="flex w-full items-center">
-                  <IconLogout />
+                  <IconLogout className="mr-2 size-4" />
                   Log out
                 </button>
               </SignOutButton>

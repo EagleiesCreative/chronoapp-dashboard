@@ -1,22 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { ArrowRight, Clock, MoreVertical } from "lucide-react"
-import { balanceData, availableBalance } from "@/data/dashboard-data"
-import { primary } from "@/data/config/colors"
-
-type ViewMode = "line" | "bar"
-
 export function BalanceCard({ chartData, stats, loading }: { chartData?: any[], stats?: any, loading?: boolean }) {
     if (loading) {
         return (
-            <div className="rounded-xl border border-border bg-card p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] h-full animate-pulse">
-                <div className="h-4 w-32 bg-muted rounded" />
-                <div className="mt-4 flex gap-6">
-                    <div className="h-10 w-24 bg-muted rounded" />
-                    <div className="h-10 w-24 bg-muted rounded" />
+            <div className="bg-card p-7 lg:px-8 h-full animate-pulse">
+                <div className="h-4 w-32 bg-muted rounded mb-8" />
+                <div className="flex gap-8 mb-8">
+                    <div className="h-12 w-24 bg-muted rounded" />
+                    <div className="h-12 w-24 bg-muted rounded" />
                 </div>
-                <div className="mt-6 h-[220px] w-full bg-muted rounded" />
+                <div className="h-[140px] w-full bg-muted/50 rounded" />
             </div>
         )
     }
@@ -24,88 +17,77 @@ export function BalanceCard({ chartData, stats, loading }: { chartData?: any[], 
     const data = chartData || []
     const maxValue = data.length > 0 ? Math.max(...data.map((d: any) => d.revenue)) : 1000
 
-    const formatValue = (val: number) => {
-        if (val >= 1000000) return `${(val / 1000000).toFixed(1)}M`
-        if (val >= 1000) return `${(val / 1000).toFixed(0)}k`
-        return `${val}`
-    }
-
     const formatCurrency = (val: number) => {
         return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(val || 0)
     }
 
-    const formatDate = (dateString: string) => {
+    const formatShortDay = (dateString: string) => {
         const d = new Date(dateString)
-        return `${d.getDate()}/${d.getMonth() + 1}`
+        return d.toLocaleDateString('en-US', { weekday: 'short' })
     }
 
-    // Process data to have max 14 data points for visual density, or skip labels
     let displayData = data
-    if (data.length > 14) {
-        // Just take last 14 days
-        displayData = data.slice(-14)
+    if (data.length > 7) {
+        // Last 7 days for the bar chart
+        displayData = data.slice(-7)
     }
 
-    const yTicks = [maxValue, maxValue * 0.75, maxValue * 0.5, maxValue * 0.25, 0]
+    // Default 7 days if empty
+    if (displayData.length === 0) {
+        const today = new Date()
+        displayData = Array.from({ length: 7 }).map((_, i) => {
+            const d = new Date(today)
+            d.setDate(d.getDate() - (6 - i))
+            return {
+                date: d.toISOString(),
+                revenue: 0
+            }
+        })
+    }
 
     return (
-        <div className="rounded-xl border border-border bg-card p-5 shadow-[0_2px_10px_rgba(0,0,0,0.02)] h-full flex flex-col">
-            {/* Header */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="bg-card p-7 lg:px-8 h-full flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="font-mono text-[0.65rem] tracking-[0.2em] uppercase text-muted-foreground">Revenue Over Time</h2>
+                <button className="font-mono text-[0.6rem] tracking-[0.1em] uppercase text-primary bg-transparent border-none cursor-pointer opacity-70 hover:opacity-100 transition-opacity">
+                    View Report
+                </button>
+            </div>
+
+            <div className="flex gap-8 mb-7">
                 <div>
-                    <p className="text-[0.8125rem] font-medium tracking-wide text-muted-foreground uppercase">Revenue Over Time</p>
-                    <div className="mt-2 flex items-center gap-6">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Revenue</p>
-                            <p className="font-bold text-foreground">{formatCurrency(stats?.totalRevenue)}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground">Total Transactions</p>
-                            <p className="font-bold text-foreground">{stats?.totalTransactions || 0}</p>
-                        </div>
-                    </div>
+                    <div className="font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground mb-1">Total Revenue</div>
+                    <div className="font-serif text-[1.5rem] font-light text-foreground">{formatCurrency(stats?.totalRevenue)}</div>
+                </div>
+                <div>
+                    <div className="font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground mb-1">Total Trans.</div>
+                    <div className="font-serif text-[1.5rem] font-light text-foreground">{stats?.totalTransactions || 0}</div>
                 </div>
             </div>
 
-            {/* Chart */}
-            <div className="mt-6 flex-1 flex flex-col justify-end">
-                <div className="mt-4 flex gap-4 h-[220px]">
-                    {/* Y-axis labels */}
-                    <div className="flex flex-col justify-between pb-7 text-right w-8">
-                        {yTicks.map((tick, i) => (
-                            <span key={i} className="text-[10px] font-medium text-muted-foreground">
-                                {formatValue(tick)}
-                            </span>
-                        ))}
-                    </div>
-
-                    {/* Approximate Area via dense bars for the CSS-only mock */}
-                    <div className="flex flex-1 items-end gap-1 overflow-hidden relative border-b border-border">
-                        {/* Faux Area Gradient Background */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-primary-500/20 to-transparent pointer-events-none" />
-
-                        {displayData.length === 0 ? (
-                            <div className="absolute inset-0 flex items-center justify-center text-sm text-gray-400 z-20">
-                                No revenue data available
+            <div className="flex items-end gap-1.5 h-[140px] pb-7 relative flex-1 before:absolute before:bottom-7 before:inset-x-0 before:h-[1px] before:bg-border">
+                {displayData.map((point: any, i: number) => {
+                    const heightPct = maxValue > 0 ? (point.revenue / maxValue) * 100 : 0
+                    // Make the last item "highlighted"
+                    const isHighlight = i === displayData.length - 1
+                    
+                    return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group">
+                            <div 
+                                className={`w-full relative transition-colors duration-200 cursor-default min-h-[4px] ${
+                                    isHighlight 
+                                    ? 'bg-primary/35 border-t border-primary after:absolute after:inset-0 after:bg-gradient-to-b after:from-primary/20 after:to-transparent' 
+                                    : 'bg-primary/15 border-t border-primary/30 group-hover:bg-primary/30'
+                                }`}
+                                style={{ height: `${Math.max(heightPct, 4)}%` }}
+                                title={`${formatShortDay(point.date)}: ${formatCurrency(point.revenue)}`}
+                            />
+                            <div className="font-mono text-[0.55rem] tracking-[0.05em] text-muted-foreground whitespace-nowrap pb-1">
+                                {formatShortDay(point.date)}
                             </div>
-                        ) : (
-                            displayData.map((point: any, i: number) => {
-                                const heightPct = maxValue > 0 ? (point.revenue / maxValue) * 100 : 0
-                                return (
-                                    <div key={i} className="flex flex-1 flex-col items-center gap-1.5 h-full justify-end z-10 hover:opacity-80 transition-opacity" title={`${point.date}: ${formatCurrency(point.revenue)}`}>
-                                        <div
-                                            className="w-full bg-primary-500 rounded-t-sm"
-                                            style={{
-                                                height: `${Math.max(heightPct, 2)}%`,
-                                            }}
-                                        />
-                                        <span className="text-[10px] font-medium text-muted-foreground">{formatDate(point.date)}</span>
-                                    </div>
-                                )
-                            })
-                        )}
-                    </div>
-                </div>
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )

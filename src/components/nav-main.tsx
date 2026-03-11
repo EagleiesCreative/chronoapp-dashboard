@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import {
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -75,32 +76,18 @@ export function NavMain({
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
-        <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2">
-            <SidebarMenuButton
-              tooltip="Quick Create"
+        <SidebarMenu className="mb-4">
+          <SidebarMenuItem className="px-6 mb-2">
+            <button
               onClick={handleQuickCreate}
-              className="bg-primary text-gray-950 hover:bg-primary/90 hover:text-gray-950 active:bg-primary/90 active:text-gray-950 min-w-8 duration-200 ease-linear rounded-lg font-medium"
+              className="flex w-full items-center gap-3 px-0 py-2.5 font-sans text-xs tracking-wider text-muted-foreground transition-colors hover:text-foreground"
             >
-              <IconCirclePlusFilled />
-              <span>Quick Create</span>
-            </SidebarMenuButton>
-            <Button
-              size="icon"
-              className="size-8 group-data-[collapsible=icon]:opacity-0 relative"
-              variant="outline"
-              asChild
-            >
-              <a href="/dashboard/broadcast">
-                <IconMail />
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-background" />
-                )}
-                <span className="sr-only">Broadcast</span>
-              </a>
-            </Button>
+              <svg viewBox="0 0 24 24" className="size-[15px] stroke-current fill-none stroke-[1.5]"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+              Quick Create
+            </button>
           </SidebarMenuItem>
         </SidebarMenu>
+        <SidebarGroupLabel className="font-mono text-[0.58rem] tracking-[0.22em] uppercase text-muted-foreground px-6 py-2 pb-2 h-auto">Overview</SidebarGroupLabel>
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.title}>
@@ -108,10 +95,10 @@ export function NavMain({
                 asChild
                 tooltip={item.title}
                 isActive={isActive(item.url)}
-                className="data-[active=true]:bg-primary-500 data-[active=true]:text-gray-950 data-[active=true]:font-semibold rounded-lg transition-colors"
+                className="w-full flex items-center gap-3 px-6 py-2.5 h-auto rounded-none relative font-sans text-[13px] tracking-wider text-muted-foreground transition-colors hover:bg-primary/5 hover:text-foreground data-[active=true]:bg-primary/10 data-[active=true]:text-foreground data-[active=true]:font-normal before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-[2px] before:h-5 before:bg-primary before:opacity-0 data-[active=true]:before:opacity-100"
               >
                 <a href={item.url}>
-                  {item.icon && <item.icon />}
+                  {item.icon && <item.icon className="size-[15px] stroke-[1.5]" />}
                   <span>{item.title}</span>
                 </a>
               </SidebarMenuButton>

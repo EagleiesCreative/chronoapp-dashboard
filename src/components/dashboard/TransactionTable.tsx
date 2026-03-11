@@ -14,35 +14,46 @@ import { toast } from "sonner"
 // ── Badge helpers ──
 
 const methodStyles: Record<string, string> = {
-    "Wire Transfer": "bg-info/15 text-info",
-    "Bank Transfer": "bg-purple/15 text-purple",
-    "QRIS": "bg-purple/15 text-purple",
+    "Wire Transfer": "bg-info/10 text-info border border-info/20",
+    "Bank Transfer": "bg-purple/10 text-purple border border-purple/20",
+    "QRIS": "bg-purple/10 text-purple border border-purple/20",
 }
 
-const statusStyles: Record<string, { dot: string; text: string }> = {
-    PAID: { dot: "bg-success", text: "text-success" },
-    SETTLED: { dot: "bg-success", text: "text-success" },
-    RECEIVED: { dot: "bg-success", text: "text-success" },
-    EXPIRED: { dot: "bg-error", text: "text-error" },
-    FAILED: { dot: "bg-error", text: "text-error" },
-    PENDING: { dot: "bg-warning", text: "text-warning" },
+const statusStyles: Record<string, string> = {
+    PAID: "bg-primary/10 text-primary border border-primary/20",
+    SETTLED: "bg-primary/10 text-primary border border-primary/20",
+    RECEIVED: "bg-primary/10 text-primary border border-primary/20",
+    EXPIRED: "bg-error/10 text-error border border-error/20",
+    FAILED: "bg-error/10 text-error border border-error/20",
+    PENDING: "bg-[#ffab00]/10 text-[#ffab00] border border-[#ffab00]/20",
+}
+
+const dotStyles: Record<string, string> = {
+    PAID: "bg-primary shadow-[0_0_8px_rgba(0,221,99,0.8)] animate-[pulse-dot_2s_infinite]",
+    SETTLED: "bg-primary shadow-[0_0_8px_rgba(0,221,99,0.8)] animate-[pulse-dot_2s_infinite]",
+    RECEIVED: "bg-primary shadow-[0_0_8px_rgba(0,221,99,0.8)] animate-[pulse-dot_2s_infinite]",
+    EXPIRED: "bg-error shadow-[0_0_8px_rgba(255,82,82,0.8)]",
+    FAILED: "bg-error shadow-[0_0_8px_rgba(255,82,82,0.8)]",
+    PENDING: "bg-[#ffab00] shadow-[0_0_8px_rgba(255,171,0,0.8)] animate-[pulse-dot-pending_2s_infinite]",
 }
 
 function MethodBadge({ method }: { method: string }) {
-    const style = methodStyles[method] || "bg-muted text-muted-foreground"
+    const style = methodStyles[method] || "bg-muted text-muted-foreground border border-border"
     return (
-        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${style}`}>
+        <span className={`inline-flex items-center rounded-full px-3 py-1 font-mono text-[0.6rem] uppercase tracking-[0.1em] ${style}`}>
             {method}
         </span>
     )
 }
 
 function StatusBadge({ status }: { status: string }) {
-    const defaultStyle = { dot: "bg-gray-400", text: "text-gray-500" }
-    const style = statusStyles[status?.toUpperCase()] || defaultStyle
+    const key = status?.toUpperCase() || ''
+    const badgeClass = statusStyles[key] || "bg-muted text-muted-foreground border border-border"
+    const dotClass = dotStyles[key] || "bg-gray-400"
+    
     return (
-        <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${style.text}`}>
-            <span className={`inline-block size-1.5 rounded-full ${style.dot}`} />
+        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full font-mono text-[0.6rem] uppercase tracking-[0.1em] ${badgeClass}`}>
+            <span className={`size-1.5 rounded-full ${dotClass}`} />
             {status}
         </span>
     )
@@ -206,119 +217,109 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
 
 
     return (
-        <div className="space-y-4">
-            {/* Info label */}
-            <div className="flex items-center justify-between">
-                <p className="text-sm text-muted-foreground">
-                    Showing the <span className="font-medium text-foreground">{filteredTransactions.length}</span> most recent transactions
-                </p>
-                <a
-                    href="/dashboard/payments"
-                    className="text-sm font-medium text-primary hover:underline"
-                >
-                    View all transactions →
-                </a>
-            </div>
-            {/* Filter bar */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Local transaction search */}
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
-                        <input
-                            type="text"
-                            value={localSearch}
-                            onChange={(e) => setLocalSearch(e.target.value)}
-                            placeholder="Search Transaction…"
-                            className="h-9 w-48 rounded-lg border border-border bg-card pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary-500"
-                        />
-                    </div>
+        <div className="space-y-6">
+            {/* Section Header */}
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+                <div className="flex items-center gap-6">
+                    <h2 className="font-sans text-[1.4rem] font-medium text-foreground tracking-wide">Recent Transactions</h2>
+                    
+                    {/* Filter Pills */}
+                    <div className="hidden sm:flex items-center gap-2">
+                        {/* Date filter - Using a wrapper to style native input date */}
+                        <div className="relative inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-card font-mono text-[0.6rem] tracking-[0.1em] uppercase text-muted-foreground cursor-pointer transition-colors hover:bg-muted/50 rounded-none">
+                            <span className="pointer-events-none whitespace-nowrap">
+                                {dateFilter ? new Date(dateFilter).toLocaleDateString() : 'Processed Date'}
+                            </span>
+                            <ChevronDown className="size-3 pointer-events-none" />
+                            {/* Hidden native date input that completely overlaps the button */}
+                            <input
+                                type="date"
+                                title="Filter by Processed Date"
+                                value={dateFilter}
+                                onChange={(e) => setDateFilter(e.target.value)}
+                                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            {/* Clear date button if active */}
+                            {dateFilter && (
+                                <button
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        setDateFilter("")
+                                    }}
+                                    className="absolute right-0 top-0 bottom-0 px-2 bg-card hover:bg-muted z-10 flex items-center justify-center border-l border-border"
+                                >
+                                    <ChevronDown className="size-3 text-muted-foreground rotate-180" />
+                                </button>
+                            )}
+                        </div>
 
-                    {/* Date filter - Using a wrapper to style native input date */}
-                    <div className="relative inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-accent focus-within:ring-2 focus-within:ring-primary-500">
-                        <Calendar className="size-3.5 text-secondary-500 pointer-events-none" />
-                        <span className="pointer-events-none whitespace-nowrap">
-                            {dateFilter ? new Date(dateFilter).toLocaleDateString() : 'Processed Date'}
-                        </span>
-                        {/* Hidden native date input that completely overlaps the button */}
-                        <input
-                            type="date"
-                            title="Filter by Processed Date"
-                            value={dateFilter}
-                            onChange={(e) => setDateFilter(e.target.value)}
-                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        />
-                        {/* Clear date button if active */}
-                        {dateFilter && (
-                            <button
-                                onClick={(e) => {
-                                    e.preventDefault()
-                                    setDateFilter("")
-                                }}
-                                className="relative z-10 ml-1 rounded-full p-0.5 hover:bg-muted"
+                        {/* Status filter - styled select */}
+                        <div className="relative inline-flex items-center gap-2 px-3 py-1.5 border border-border bg-card font-mono text-[0.6rem] tracking-[0.1em] uppercase text-muted-foreground cursor-pointer transition-colors hover:bg-muted/50 rounded-none">
+                            <select
+                                title="Filter by Status"
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="appearance-none bg-transparent placeholder-muted-foreground text-muted-foreground pr-4 w-full h-full cursor-pointer focus:outline-none uppercase tracking-[0.1em]"
                             >
-                                <ChevronDown className="size-3 text-gray-400 rotate-180" />
-                            </button>
-                        )}
-                    </div>
-
-                    {/* Status filter - styled select */}
-                    <div className="relative inline-flex items-center gap-1.5 rounded-lg border border-border bg-card text-sm font-medium text-foreground transition-colors hover:bg-accent focus-within:ring-2 focus-within:ring-primary-500">
-                        <select
-                            title="Filter by Status"
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="appearance-none bg-transparent pl-3 pr-8 py-1.5 w-full h-full cursor-pointer focus:outline-none"
-                        >
-                            <option value="">More (All Statuses)</option>
-                            <option value="PAID">Paid</option>
-                            <option value="PENDING">Pending</option>
-                            <option value="FAILED">Failed / Expired</option>
-                        </select>
-                        <ChevronDown className="absolute right-3 top-1/2 size-3.5 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                                <option value="">Status</option>
+                                <option value="PAID">Paid</option>
+                                <option value="PENDING">Pending</option>
+                                <option value="FAILED">Failed / Expired</option>
+                            </select>
+                            <ChevronDown className="absolute right-3 top-1/2 size-3 -translate-y-1/2 pointer-events-none" />
+                        </div>
                     </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-3">
+                {/* Search Box */}
+                <div className="relative flex items-center gap-2.5 bg-card border border-border px-4 py-2 w-full sm:w-[220px] transition-colors focus-within:border-primary/40 rounded-none">
+                    <Search className="size-[13px] text-muted-foreground shrink-0" />
+                    <input
+                        type="text"
+                        value={localSearch}
+                        onChange={(e) => setLocalSearch(e.target.value)}
+                        placeholder="Search..."
+                        className="bg-transparent border-none outline-none font-mono text-[0.68rem] text-foreground placeholder:text-muted-foreground w-full"
+                    />
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-[0_2px_10px_rgba(0,0,0,0.02)]">
-                <table className="w-full min-w-[48rem] text-left">
+            {/* Table Container */}
+            <div className="overflow-x-auto border border-border bg-card">
+                <table className="w-full min-w-[48rem] text-left border-collapse">
                     <thead>
                         <tr className="border-b border-border bg-card">
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 Payment ID
                             </th>
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 Total Amount
                             </th>
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 To
                             </th>
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 Payment Method
                             </th>
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 Processed Date
                             </th>
-                            <th className="px-3 py-3 text-[0.8125rem] font-medium text-muted-foreground">
+                            <th className="px-6 py-4 font-mono text-[0.58rem] tracking-[0.15em] uppercase text-muted-foreground font-normal">
                                 Status
                             </th>
+                            <th className="px-6 py-4 w-10"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading && displayedTransactions.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                                <td colSpan={7} className="py-8 text-center text-sm text-muted-foreground bg-card">
                                     <Loader2 className="mx-auto size-6 animate-spin" />
                                 </td>
                             </tr>
                         ) : displayedTransactions.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                                <td colSpan={7} className="py-8 text-center font-mono text-sm text-muted-foreground bg-card">
                                     No transactions found matching your filters.
                                 </td>
                             </tr>
@@ -327,29 +328,41 @@ export function TransactionTable({ transactions = [], loading, globalSearch = ""
                                 return (
                                     <tr
                                         key={tx.id}
-                                        className="transition-colors duration-150 border-none hover:bg-accent odd:bg-card even:bg-secondary-50 dark:even:bg-accent"
+                                        className="border-b border-border bg-card transition-colors duration-200 hover:bg-muted/10 last:border-0"
                                     >
-                                        <td className="px-3 py-3 font-mono text-sm text-foreground">
+                                        <td className="px-6 py-4 font-mono text-[0.65rem] text-foreground">
                                             {tx.external_id || "N/A"}
                                         </td>
-                                        <td className="px-3 py-3 text-sm font-medium text-foreground">{formatCurrency(tx.amount)}</td>
-                                        <td className="px-3 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <Avatar initials="GU" />
-                                                <span className="text-sm text-foreground">Guest User</span>
+                                        <td className="px-6 py-4">
+                                            <div className="font-sans text-[1.05rem] font-medium leading-none tracking-wide text-foreground flex items-baseline">
+                                                <span className="text-[0.65rem] text-muted-foreground font-light align-super mr-[2px]">Rp</span>
+                                                {new Intl.NumberFormat('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(tx.amount || 0)}
                                             </div>
                                         </td>
-                                        <td className="px-3 py-3">
-                                            <MethodBadge method={tx.payment_method || "QRIS"} />
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-sans font-medium text-[0.7rem] text-primary shrink-0">
+                                                    G
+                                                </div>
+                                                <span className="font-sans text-[13px] tracking-wide text-foreground">Guest User</span>
+                                            </div>
                                         </td>
-                                        <td className="px-3 py-3 text-sm text-foreground">
+                                        <td className="px-6 py-4 font-mono text-[0.65rem] text-muted-foreground">
+                                            {tx.payment_method || "QRIS"}
+                                        </td>
+                                        <td className="px-6 py-4 font-mono text-[0.65rem] text-foreground">
                                             {formatDate(tx.created)}
-                                            <span className="text-xs text-muted-foreground ml-2 block sm:inline">
+                                            <span className="text-muted-foreground ml-2">
                                                 {new Date(tx.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-3">
+                                        <td className="px-6 py-4">
                                             <StatusBadge status={tx.status} />
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <button className="text-muted-foreground hover:text-foreground transition-colors bg-transparent border-none cursor-pointer p-1">
+                                                <ChevronRight className="size-4" />
+                                            </button>
                                         </td>
                                     </tr>
                                 )

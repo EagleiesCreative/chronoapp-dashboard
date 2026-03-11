@@ -237,10 +237,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   return (
     <Sidebar collapsible="offcanvas" className="border-r border-sidebar-border bg-sidebar" {...props}>
-      <SidebarHeader className="bg-sidebar px-2 py-4">
-        <span className="px-2 text-[10px] font-semibold tracking-widest text-muted-foreground uppercase">
-          Menu
-        </span>
+      <SidebarHeader className="bg-sidebar border-b border-sidebar-border p-[24px] pt-[28px]">
+        <a href="#" className="font-serif text-[1.4rem] font-light tracking-[0.08em] text-foreground leading-none">
+          Fram<span className="text-primary italic">r</span>
+        </a>
+        <div className="font-mono text-[0.58rem] tracking-[0.2em] uppercase text-muted-foreground mt-[2px]">
+          Studio Platform
+        </div>
       </SidebarHeader>
       <SidebarContent>
         {mounted ? (

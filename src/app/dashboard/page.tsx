@@ -29,36 +29,26 @@ export default function Page() {
     fetchStats()
   }, [])
 
-  const handleGenerateReport = () => {
-    window.print()
-  }
-
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 print:p-0 print:gap-4 print:bg-white print:text-black">
-      <div className="print:hidden">
-        <ActionBar
-          searchTerm={globalSearch}
-          onSearch={setGlobalSearch}
-          onGenerateReport={handleGenerateReport}
-        />
-      </div>
-
+    <div className="flex flex-1 flex-col gap-6 p-6">
       <StatCards stats={data?.stats} loading={loading} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-5 print:grid-cols-1 print:gap-4">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-[1px] bg-border animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
+        <div className="lg:col-span-1">
           <SpendingLimitsCard stats={data?.stats} loading={loading} />
         </div>
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-2">
           <BalanceCard chartData={data?.chartData} stats={data?.stats} loading={loading} />
         </div>
       </div>
 
-      <TransactionTable
-        transactions={data?.recentTransactions}
-        loading={loading}
-        globalSearch={globalSearch}
-      />
+      <div className="animate-fade-in-up" style={{ animationDelay: '0.6s' }}>
+        <TransactionTable
+          transactions={data?.recentTransactions}
+          loading={loading}
+          globalSearch={globalSearch}
+        />
+      </div>
     </div>
   )
 }

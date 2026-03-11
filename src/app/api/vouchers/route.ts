@@ -56,6 +56,18 @@ export async function POST(req: NextRequest) {
             }, { status: 403 })
         }
 
+        // Verify that the booth belongs to the organization
+        const { data: booth, error: boothError } = await supabase
+            .from('booths')
+            .select('id')
+            .eq('id', boothId)
+            .eq('organization_id', orgId)
+            .single()
+
+        if (boothError || !booth) {
+            return NextResponse.json({ error: "Booth not found or access denied" }, { status: 404 })
+        }
+
         const { data, error } = await supabase
             .from('vouchers')
             .insert({
@@ -106,6 +118,18 @@ export async function PUT(req: NextRequest) {
                 message: "Vouchers are only available on the Pro plan.",
                 upgrade_required: true
             }, { status: 403 })
+        }
+
+        // Verify that the voucher belongs to a booth in the user's organization
+        const { data: voucherCheck, error: checkError } = await supabase
+            .from('vouchers')
+            .select('id, booths!inner(organization_id)')
+            .eq('id', id)
+            .eq('booths.organization_id', orgId)
+            .single()
+
+        if (checkError || !voucherCheck) {
+            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
         }
 
         const { data, error } = await supabase
@@ -159,6 +183,18 @@ export async function DELETE(req: NextRequest) {
                 message: "Vouchers are only available on the Pro plan.",
                 upgrade_required: true
             }, { status: 403 })
+        }
+
+        // Verify that the voucher belongs to a booth in the user's organization
+        const { data: voucherCheck, error: checkError } = await supabase
+            .from('vouchers')
+            .select('id, booths!inner(organization_id)')
+            .eq('id', id)
+            .eq('booths.organization_id', orgId)
+            .single()
+
+        if (checkError || !voucherCheck) {
+            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
         }
 
         const { error } = await supabase

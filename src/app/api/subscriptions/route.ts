@@ -31,15 +31,20 @@ export async function GET(req: NextRequest) {
 // POST - Create/Upgrade subscription
 export async function POST(req: NextRequest) {
     try {
-        const { userId } = await auth()
-        if (!userId) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+        const { userId, orgId: authOrgId, orgRole } = await auth()
+        if (!userId || !authOrgId) {
+            return NextResponse.json({ error: 'Not authenticated or missing organization' }, { status: 401 })
+        }
+
+        if (orgRole !== 'org:admin') {
+            return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
 
         const body = await req.json()
-        const { orgId, planId } = body
+        const { planId } = body
+        const orgId = authOrgId // Overwrite any potentially forged orgId in the request body
 
-        if (!orgId || !planId) {
+        if (!planId) {
             return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
         }
 
@@ -102,17 +107,16 @@ export async function POST(req: NextRequest) {
 // DELETE - Cancel subscription
 export async function DELETE(req: NextRequest) {
     try {
-        const { userId } = await auth()
-        if (!userId) {
-            return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+        const { userId, orgId: authOrgId, orgRole } = await auth()
+        if (!userId || !authOrgId) {
+            return NextResponse.json({ error: 'Not authenticated or missing organization' }, { status: 401 })
         }
 
-        const { searchParams } = new URL(req.url)
-        const orgId = searchParams.get('orgId')
-
-        if (!orgId) {
-            return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+        if (orgRole !== 'org:admin') {
+            return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
         }
+
+        const orgId = authOrgId // Overwrite any potentially forged orgId from URL params
 
         // Mark subscription as cancelled (will downgrade at end of period)
         const { error } = await supabase

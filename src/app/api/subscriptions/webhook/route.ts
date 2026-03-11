@@ -8,7 +8,12 @@ export async function POST(req: NextRequest) {
 
         // Verify webhook signature (in production, verify with Xendit webhook secret)
         const webhookToken = req.headers.get('x-callback-token')
-        // TODO: Verify webhookToken against XENDIT_WEBHOOK_SECRET
+        const EXPECTED_TOKEN = process.env.XENDIT_WEBHOOK_SECRET
+
+        if (!EXPECTED_TOKEN || webhookToken !== EXPECTED_TOKEN) {
+            console.error('Invalid Xendit webhook token')
+            return NextResponse.json({ error: 'Unauthorized webhook' }, { status: 401 })
+        }
 
         console.log('Subscription webhook received:', body)
 
