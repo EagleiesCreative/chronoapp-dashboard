@@ -1,6 +1,7 @@
 "use client"
 
-import { useUser, SignOutButton, useClerk, useOrganization } from "@clerk/nextjs"
+import { useUser, SignOutButton, useOrganization } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
 import * as React from "react"
 import {
   IconCreditCard,
@@ -31,7 +32,7 @@ export function NavUser() {
   const { isMobile } = useSidebar()
   const { user } = useUser()
   const { organization } = useOrganization()
-  const { openUserProfile } = useClerk()
+  const router = useRouter()
 
   React.useEffect(() => {
     if (!user) {
@@ -49,7 +50,7 @@ export function NavUser() {
   }
 
   const handleAccountClick = () => {
-    openUserProfile()
+    router.push('/dashboard/settings')
   }
 
   const displayName = organization?.name || user.fullName || user.firstName || user.emailAddresses[0]?.emailAddress || "Guest"

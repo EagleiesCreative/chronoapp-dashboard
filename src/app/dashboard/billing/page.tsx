@@ -2,12 +2,25 @@
 
 import { useOrganization } from "@clerk/nextjs"
 import { useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { IconSparkles, IconCheck, IconCreditCard, IconReceipt, IconAlertTriangle } from "@tabler/icons-react"
+import {
+    IconSparkles,
+    IconCheck,
+    IconCreditCard,
+    IconAlertTriangle,
+    IconClock,
+    IconExternalLink,
+    IconReceipt,
+    IconLoader,
+    IconX,
+    IconArrowUp,
+    IconArrowDown,
+} from "@tabler/icons-react"
 import Link from "next/link"
 
 interface Subscription {
@@ -30,16 +43,38 @@ interface SubscriptionHistory {
     plan_id: string
     action: string
     amount: number
+    payment_method: string | null
+    payment_id: string | null
     created_at: string
+}
+
+interface PendingInvoice {
+    id: string
+    invoice_url: string
+    amount: number
+    status: string
+    expiry_date: string
 }
 
 export default function BillingPage() {
     const { organization } = useOrganization()
+    const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
     const [subscription, setSubscription] = useState<Subscription | null>(null)
     const [plans, setPlans] = useState<Plan[]>([])
     const [history, setHistory] = useState<SubscriptionHistory[]>([])
+    const [pendingInvoice, setPendingInvoice] = useState<PendingInvoice | null>(null)
     const [upgrading, setUpgrading] = useState(false)
+
+    // Handle payment redirect status
+    useEffect(() => {
+        const paymentStatus = searchParams.get('payment')
+        if (paymentStatus === 'success') {
+            toast.success('Payment successful! Your subscription is being activated.')
+        } else if (paymentStatus === 'failed') {
+            toast.error('Payment failed or was cancelled. Please try again.')
+        }
+    }, [searchParams])
 
     useEffect(() => {
         if (!organization) return
@@ -50,6 +85,8 @@ export default function BillingPage() {
                 const data = await res.json()
                 setSubscription(data.subscription)
                 setPlans(data.plans || [])
+                setHistory(data.history || [])
+                setPendingInvoice(data.pendingInvoice || null)
             } catch (error) {
                 console.error('Error fetching subscription:', error)
                 toast.error('Failed to load subscription details')
@@ -74,10 +111,13 @@ export default function BillingPage() {
 
             const data = await res.json()
 
-            if (data.payment_required) {
-                // Redirect to payment
+            if (!res.ok) {
+                toast.error(data.error || 'Failed to process upgrade')
+                return
+            }
+
+            if (data.payment_required && data.payment_url) {
                 toast.info('Redirecting to payment...')
-                // TODO: Redirect to Xendit payment page
                 window.location.href = data.payment_url
             } else if (data.success) {
                 toast.success('Subscription updated!')
@@ -112,6 +152,25 @@ export default function BillingPage() {
         }
     }
 
+    const getActionDisplay = (action: string) => {
+        switch (action) {
+            case 'upgraded':
+                return { label: 'Upgraded to Pro', icon: <IconArrowUp className="h-4 w-4 text-green-500" />, color: 'text-green-600' }
+            case 'downgraded':
+                return { label: 'Downgraded to Basic', icon: <IconArrowDown className="h-4 w-4 text-orange-500" />, color: 'text-orange-600' }
+            case 'cancelled':
+                return { label: 'Cancelled', icon: <IconX className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
+            case 'payment_initiated':
+                return { label: 'Payment Initiated', icon: <IconClock className="h-4 w-4 text-blue-500" />, color: 'text-blue-600' }
+            case 'payment_failed':
+                return { label: 'Payment Failed', icon: <IconAlertTriangle className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
+            case 'payment_expired':
+                return { label: 'Payment Expired', icon: <IconClock className="h-4 w-4 text-amber-500" />, color: 'text-amber-600' }
+            default:
+                return { label: action, icon: <IconReceipt className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' }
+        }
+    }
+
     const currentPlan = plans.find(p => p.id === subscription?.subscription_plan) || plans[0]
     const isPro = subscription?.subscription_plan === 'pro'
     const isCancelled = subscription?.subscription_status === 'cancelled'
@@ -135,6 +194,34 @@ export default function BillingPage() {
                     Manage your subscription and billing information
                 </p>
             </div>
+
+            {/* Pending Payment Banner */}
+            {pendingInvoice && (
+                <Card className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30">
+                    <CardContent className="flex items-center justify-between py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
+                                <IconClock className="h-5 w-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <p className="font-medium text-amber-800 dark:text-amber-200">
+                                    Payment Pending
+                                </p>
+                                <p className="text-sm text-amber-700 dark:text-amber-300">
+                                    Complete your payment of Rp {pendingInvoice.amount.toLocaleString('id-ID')} to activate Pro plan
+                                </p>
+                            </div>
+                        </div>
+                        <Button
+                            onClick={() => window.location.href = pendingInvoice.invoice_url}
+                            className="shrink-0"
+                        >
+                            <IconExternalLink className="mr-2 h-4 w-4" />
+                            Complete Payment
+                        </Button>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Current Plan */}
             <Card>
@@ -205,9 +292,20 @@ export default function BillingPage() {
                 </CardContent>
                 <CardFooter className="flex gap-2">
                     {!isPro ? (
-                        <Button onClick={() => handleUpgrade('pro')} disabled={upgrading}>
-                            <IconSparkles className="h-4 w-4 mr-2" />
-                            {upgrading ? 'Processing...' : 'Upgrade to Pro'}
+                        <Button onClick={() => handleUpgrade('pro')} disabled={upgrading || !!pendingInvoice}>
+                            {upgrading ? (
+                                <>
+                                    <IconLoader className="h-4 w-4 mr-2 animate-spin" />
+                                    Processing...
+                                </>
+                            ) : pendingInvoice ? (
+                                'Payment Pending...'
+                            ) : (
+                                <>
+                                    <IconSparkles className="h-4 w-4 mr-2" />
+                                    Upgrade to Pro
+                                </>
+                            )}
                         </Button>
                     ) : !isCancelled ? (
                         <Button variant="outline" onClick={handleCancel}>
@@ -218,9 +316,6 @@ export default function BillingPage() {
                             {upgrading ? 'Processing...' : 'Reactivate Pro'}
                         </Button>
                     )}
-                    <Button variant="outline" asChild>
-                        <Link href="/pricing">View All Plans</Link>
-                    </Button>
                 </CardFooter>
             </Card>
 
@@ -269,9 +364,9 @@ export default function BillingPage() {
                                         className="w-full mt-4"
                                         variant={plan.id === 'pro' ? 'default' : 'outline'}
                                         onClick={() => handleUpgrade(plan.id)}
-                                        disabled={upgrading}
+                                        disabled={upgrading || (plan.id === 'pro' && !!pendingInvoice)}
                                     >
-                                        {plan.id === 'pro' ? 'Upgrade' : 'Downgrade'}
+                                        {plan.id === 'pro' ? (pendingInvoice ? 'Payment Pending...' : 'Upgrade') : 'Downgrade'}
                                     </Button>
                                 )}
                                 {plan.id === subscription?.subscription_plan && (
@@ -298,10 +393,61 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent>
                     <p className="text-muted-foreground">
-                        Payments are processed securely via Xendit. You can pay using bank transfer, e-wallet, or credit card.
+                        Payments are processed securely via Xendit. You can pay using bank transfer (BCA, BNI, BRI, Mandiri), e-wallet (OVO, DANA, GoPay), QRIS, or credit card.
                     </p>
                 </CardContent>
             </Card>
+
+            {/* Billing History */}
+            {history.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <IconReceipt className="h-5 w-5" />
+                            Billing History
+                        </CardTitle>
+                        <CardDescription>
+                            Your recent subscription activity
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {history.map((entry) => {
+                                const display = getActionDisplay(entry.action)
+                                return (
+                                    <div
+                                        key={entry.id}
+                                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {display.icon}
+                                            <div>
+                                                <p className={`text-sm font-medium ${display.color}`}>
+                                                    {display.label}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {new Date(entry.created_at).toLocaleDateString('id-ID', {
+                                                        day: 'numeric',
+                                                        month: 'long',
+                                                        year: 'numeric',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        {entry.amount > 0 && (
+                                            <span className="text-sm font-mono font-medium">
+                                                Rp {Number(entry.amount).toLocaleString('id-ID')}
+                                            </span>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* Need Help */}
             <Card className="bg-muted/30">
@@ -313,7 +459,7 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardFooter>
                     <Button variant="outline" asChild>
-                        <Link href="/dashboard/help">Contact Support</Link>
+                        <Link href="/dashboard/support">Contact Support</Link>
                     </Button>
                 </CardFooter>
             </Card>

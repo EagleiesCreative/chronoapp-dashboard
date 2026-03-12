@@ -1,15 +1,19 @@
 import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
+import { supabase } from "@/lib/supabase-server"
 
-// The base URL from env (server-side proxy to avoid CORS)
-const BASE_URL = process.env.NEXT_PUBLIC_DEVICE_API_URL || "https://dev.eagleies.com/api"
-// API Key - prefer server-only env var, fall back to NEXT_PUBLIC_ version
-const API_KEY = process.env.DEVICE_API_KEY || process.env.NEXT_PUBLIC_DEVICE_API_KEY || ""
+const TWO_MINUTES_MS = 2 * 60 * 1000
+
+function getCalculatedStatus(lastHeartbeat: string | null): 'online' | 'offline' | 'never_connected' {
+    if (!lastHeartbeat) return 'never_connected'
+    const diff = Date.now() - new Date(lastHeartbeat).getTime()
+    return diff < TWO_MINUTES_MS ? 'online' : 'offline'
+}
 
 export async function GET(req: NextRequest) {
     try {
         // 1. Authenticate with Clerk
-        const { userId, orgId } = await auth()
+        const { userId, orgId, orgRole } = await auth()
         if (!userId) {
             return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
         }
@@ -18,39 +22,61 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "No organization selected" }, { status: 400 })
         }
 
-        // 2. Construct the external URL
-        const baseUrlClean = BASE_URL.endsWith('/') ? BASE_URL.slice(0, -1) : BASE_URL
-        const endpoint = `${baseUrlClean}/admin/devices`
+        // 2. Query Supabase booths table (same source of truth as Booth Management)
+        let query = supabase
+            .from('booths')
+            .select('id, name, location, organization_id, device_name, device_ip, status, last_heartbeat, last_login_at, booth_id')
+            .eq('organization_id', orgId)
+            .order('created_at', { ascending: false })
 
-        // 3. Fetch from external API
-        const res = await fetch(endpoint, {
-            method: "GET",
-            headers: {
-                "Content-Type": "application/json",
-                ...(API_KEY ? { "X-API-Key": API_KEY } : {})
-            },
-            cache: 'no-store'
-        })
+        // Non-admin users only see their assigned booths
+        if (orgRole !== 'org:admin') {
+            query = query.eq('assigned_to', userId)
+        }
 
-        if (!res.ok) {
-            const errorText = await res.text().catch(() => "Unknown error")
-            console.error(`/api/admin/devices GET - External API error: ${res.status} ${res.statusText}`, errorText)
+        const { data: booths, error } = await query
 
-            // Return an empty but valid response so the page doesn't break
+        if (error) {
+            console.error("/api/admin/devices GET supabase error:", error)
             return NextResponse.json({
                 success: true,
                 summary: { total: 0, online: 0, offline: 0, never_connected: 0 },
                 devices: [],
-                _warning: `External device API returned ${res.status}`
+                _warning: "Failed to fetch device data"
             })
         }
 
-        const data = await res.json()
-        return NextResponse.json(data)
-    } catch (error: any) {
-        console.error("/api/admin/devices GET error:", error?.message || error)
+        // 3. Map booths to the Device shape expected by the frontend
+        const devices = (booths || []).map(booth => ({
+            booth_id: booth.booth_id || booth.id,
+            booth_name: booth.name,
+            location: booth.location || '',
+            organization_id: booth.organization_id,
+            device_name: booth.device_name || '',
+            device_ip: booth.device_ip || '',
+            status: getCalculatedStatus(booth.last_heartbeat),
+            last_heartbeat: booth.last_heartbeat,
+            last_login_at: booth.last_login_at || '',
+            online_duration_seconds: null
+        }))
 
-        // Return empty valid response instead of error so page renders gracefully
+        // 4. Calculate summary
+        const summary = {
+            total: devices.length,
+            online: devices.filter(d => d.status === 'online').length,
+            offline: devices.filter(d => d.status === 'offline').length,
+            never_connected: devices.filter(d => d.status === 'never_connected').length
+        }
+
+        return NextResponse.json({
+            success: true,
+            summary,
+            devices
+        })
+
+    } catch (err: any) {
+        console.error("/api/admin/devices GET error:", err?.message || err)
+
         return NextResponse.json({
             success: true,
             summary: { total: 0, online: 0, offline: 0, never_connected: 0 },
