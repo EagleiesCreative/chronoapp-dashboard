@@ -1,13 +1,12 @@
 "use client"
 
+import { Suspense, useState, useEffect } from "react"
 import { useOrganization } from "@clerk/nextjs"
-import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
 import {
     IconSparkles,
     IconCheck,
@@ -56,7 +55,7 @@ interface PendingInvoice {
     expiry_date: string
 }
 
-export default function BillingPage() {
+function BillingContent() {
     const { organization } = useOrganization()
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
@@ -331,8 +330,8 @@ export default function BillingPage() {
                             <div
                                 key={plan.id}
                                 className={`p-4 rounded-lg border ${plan.id === subscription?.subscription_plan
-                                        ? 'border-primary bg-primary/5'
-                                        : 'border-muted'
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-muted'
                                     }`}
                             >
                                 <div className="flex items-center justify-between mb-4">
@@ -464,5 +463,20 @@ export default function BillingPage() {
                 </CardFooter>
             </Card>
         </div>
+    )
+}
+
+export default function BillingPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex flex-col gap-6 p-4 md:p-6">
+                <div className="animate-pulse space-y-6">
+                    <div className="h-8 bg-muted rounded w-48" />
+                    <div className="h-64 bg-muted rounded" />
+                </div>
+            </div>
+        }>
+            <BillingContent />
+        </Suspense>
     )
 }
