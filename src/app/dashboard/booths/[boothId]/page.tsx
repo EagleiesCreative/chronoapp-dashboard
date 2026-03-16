@@ -12,6 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { IconArrowLeft, IconEdit, IconTrash } from "@tabler/icons-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
+import { IconGif, IconPrinter, IconFilter, IconSparkles, IconInfoCircle } from "@tabler/icons-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useFeatureAccess, featureDetails } from "@/components/feature-gate"
+import { FEATURES } from "@/lib/features"
+import { cn } from "@/lib/utils"
 
 interface Booth {
     id: string
@@ -28,6 +35,10 @@ interface Booth {
     booth_code: string
     assigned_to?: string
     app_pin?: string
+    gif_enabled: boolean
+    print_enabled: boolean
+    filter_enabled: boolean
+    booth_type: 'REGULAR_4R' | 'A3_NEWSPAPER'
 }
 
 interface Member {
@@ -57,6 +68,10 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
     const [price, setPrice] = useState("")
     const [assignedTo, setAssignedTo] = useState("")
     const [appPin, setAppPin] = useState("")
+    const [gifEnabled, setGifEnabled] = useState(false)
+    const [printEnabled, setPrintEnabled] = useState(true)
+    const [filterEnabled, setFilterEnabled] = useState(true)
+    const [boothType, setBoothType] = useState<'REGULAR_4R' | 'A3_NEWSPAPER'>('REGULAR_4R')
 
     const isAdmin = membership?.role === "org:admin"
 
@@ -86,6 +101,10 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                 setPrice(foundBooth.price.toString())
                 setAssignedTo(foundBooth.assigned_to || "")
                 setAppPin(foundBooth.app_pin || "")
+                setGifEnabled(foundBooth.gif_enabled)
+                setPrintEnabled(foundBooth.print_enabled)
+                setFilterEnabled(foundBooth.filter_enabled)
+                setBoothType(foundBooth.booth_type)
             } else {
                 toast.error("Booth not found")
                 router.push("/dashboard/booths")
@@ -144,7 +163,11 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                     dslrbooth_pass: dslrboothPass,
                     price: parseFloat(price),
                     assigned_to: assignedPayload,
-                    app_pin: appPin || null
+                    app_pin: appPin || null,
+                    gif_enabled: gifEnabled,
+                    print_enabled: printEnabled,
+                    filter_enabled: filterEnabled,
+                    booth_type: boothType
                 })
             })
 
@@ -206,6 +229,21 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-6">
+                                <div className="flex flex-col gap-3">
+                                    <Label htmlFor="booth-type">Booth Type</Label>
+                                    <Select value={boothType} onValueChange={(v: any) => setBoothType(v)} disabled={saving}>
+                                        <SelectTrigger id="booth-type">
+                                            <SelectValue placeholder="Select booth type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="REGULAR_4R">Regular 4R Booth</SelectItem>
+                                            <SelectItem value="A3_NEWSPAPER">A3 Newspaper Booth</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-xs text-muted-foreground">
+                                        Note: Changing the booth type will affect features and layout on the standalone app.
+                                    </p>
+                                </div>
                                 <div className="flex flex-col gap-3">
                                     <Label htmlFor="edit-assignee">Assign to Member</Label>
                                     <Select value={assignedTo} onValueChange={setAssignedTo} disabled={!isAdmin}>
@@ -282,6 +320,57 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
 
                     <Card className="mt-6">
                         <CardHeader>
+                            <CardTitle>Activation Features</CardTitle>
+                            <CardDescription>
+                                Enable or disable interactive features for this booth.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-6">
+                                <ActivationFeatureRow 
+                                    icon={<IconGif className="h-5 w-5 text-purple-500" />}
+                                    iconBg="bg-purple-500/10"
+                                    title="GIF Mode"
+                                    description="Allow users to record and save short GIFs"
+                                    feature={FEATURES.GIF}
+                                    checked={gifEnabled}
+                                    onCheckedChange={setGifEnabled}
+                                />
+
+                                <Separator />
+
+                                <ActivationFeatureRow 
+                                    icon={<IconPrinter className="h-5 w-5 text-blue-500" />}
+                                    iconBg="bg-blue-500/10"
+                                    title="Print Feature"
+                                    description="Enable photo printing after session"
+                                    checked={printEnabled}
+                                    onCheckedChange={setPrintEnabled}
+                                />
+
+                                <Separator />
+
+                                <ActivationFeatureRow 
+                                    icon={<IconFilter className="h-5 w-5 text-emerald-500" />}
+                                    iconBg="bg-emerald-500/10"
+                                    title="Filter Modes"
+                                    description="Allow users to apply filters to their photos"
+                                    feature={FEATURES.FILTERS}
+                                    checked={filterEnabled}
+                                    onCheckedChange={setFilterEnabled}
+                                />
+
+                                <div className="flex justify-end pt-4">
+                                    <Button onClick={handleSave} disabled={saving}>
+                                        {saving ? 'Saving...' : 'Save Activation Settings'}
+                                    </Button>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="mt-6">
+                        <CardHeader>
                             <CardTitle>App Security</CardTitle>
                             <CardDescription>
                                 Set a PIN to secure booth app access.
@@ -350,6 +439,76 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                     </Card>
                 </TabsContent>
             </Tabs>
+        </div>
+    )
+}
+
+interface ActivationFeatureRowProps {
+    icon: React.ReactNode
+    iconBg: string
+    title: string
+    description: string
+    feature?: string
+    checked: boolean
+    onCheckedChange: (checked: boolean) => void
+}
+
+function ActivationFeatureRow({ icon, iconBg, title, description, feature, checked, onCheckedChange }: ActivationFeatureRowProps) {
+    const { hasAccess, loading } = feature ? useFeatureAccess(feature) : { hasAccess: true, loading: false }
+    const details = feature ? featureDetails[feature] : null
+
+    return (
+        <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+                <div className={cn("p-2 rounded-lg", iconBg)}>
+                    {icon}
+                </div>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <Label className="text-base font-medium">{title}</Label>
+                        {details && (
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <div className="cursor-help text-muted-foreground hover:text-foreground transition-colors">
+                                            <IconInfoCircle className="h-4 w-4" />
+                                        </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="p-3 max-w-[250px]">
+                                        <div className="space-y-2">
+                                            <p className="font-semibold text-xs uppercase tracking-wider text-primary">{details.title}</p>
+                                            <p className="text-xs">{details.description}</p>
+                                            <ul className="text-[11px] space-y-1 list-disc list-inside text-muted-foreground">
+                                                {details.benefits.map((benefit, idx) => (
+                                                    <li key={idx}>{benefit}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    </TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                        )}
+                    </div>
+                    <p className="text-sm text-muted-foreground">{description}</p>
+                </div>
+            </div>
+            
+            <div className="flex items-center gap-4">
+                {!loading && !hasAccess && (
+                    <Link 
+                        href="/dashboard/billing" 
+                        className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline group"
+                    >
+                        <IconSparkles className="h-3.5 w-3.5" />
+                        Requires Pro
+                    </Link>
+                )}
+                <Switch 
+                    checked={checked && hasAccess} 
+                    onCheckedChange={onCheckedChange}
+                    disabled={loading || !hasAccess}
+                />
+            </div>
         </div>
     )
 }

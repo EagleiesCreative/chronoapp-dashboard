@@ -7,6 +7,8 @@ export const FEATURES = {
     PRIORITY_SUPPORT: 'priority_support',
     CUSTOM_BRANDING: 'custom_branding',
     ADVANCED_ANALYTICS: 'advanced_analytics',
+    GIF: 'gif',
+    FILTERS: 'filters',
 } as const
 
 export type Feature = typeof FEATURES[keyof typeof FEATURES]

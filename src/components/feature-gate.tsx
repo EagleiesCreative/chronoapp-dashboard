@@ -48,11 +48,41 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
     return <>{children}</>
 }
 
+export function useFeatureAccess(feature: string) {
+    const { organization } = useOrganization()
+    const [hasAccess, setHasAccess] = useState(false)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        if (!organization) {
+            setLoading(false)
+            return
+        }
+
+        const checkFeature = async () => {
+            try {
+                const res = await fetch(`/api/features/check?orgId=${organization.id}&feature=${feature}`)
+                const data = await res.json()
+                setHasAccess(data.hasAccess)
+            } catch (error) {
+                console.error('Error checking feature:', error)
+                setHasAccess(false)
+            } finally {
+                setLoading(false)
+            }
+        }
+
+        checkFeature()
+    }, [organization, feature])
+
+    return { hasAccess, loading }
+}
+
 interface UpgradePromptProps {
     feature: string
 }
 
-const featureDetails: Record<string, { title: string; description: string; benefits: string[] }> = {
+export const featureDetails: Record<string, { title: string; description: string; benefits: string[] }> = {
     vouchers: {
         title: "Voucher System",
         description: "Create discount codes and promotional vouchers for your customers",
@@ -111,6 +141,26 @@ const featureDetails: Record<string, { title: string; description: string; benef
             "Customer behavior analytics",
             "Peak hours analysis",
             "Export to Excel/PDF"
+        ]
+    },
+    gif: {
+        title: "GIF Mode",
+        description: "Capture fun, looping animations with your photobooth",
+        benefits: [
+            "High-quality GIF recording",
+            "Customizable GIF speed",
+            "Boomerang effects",
+            "Direct social sharing"
+        ]
+    },
+    filters: {
+        title: "Photo Filters",
+        description: "Give your users creative control with professional filters",
+        benefits: [
+            "Black & White, Sepia, and more",
+            "Beauty and smoothing filters",
+            "Lut-based color grading",
+            "Real-time filter preview"
         ]
     }
 }
