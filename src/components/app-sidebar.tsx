@@ -70,6 +70,11 @@ const data = {
       url: "/dashboard/gallery",
       icon: IconPhoto,
     },
+    {
+      title: "Frames",
+      url: "/dashboard/frames",
+      icon: IconInnerShadowTop,
+    },
   ],
   navClouds: [
     {

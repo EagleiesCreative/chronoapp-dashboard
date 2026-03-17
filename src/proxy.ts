@@ -55,7 +55,8 @@ const isProtectedRoute = createRouteMatcher([
   '/api/payments(.*)',
   '/api/booths(.*)',
   '/api/analytics(.*)',
-  '/api/reports(.*)'
+  '/api/reports(.*)',
+  '/api/frames(.*)'
 ]);
 
 // 3. Proxy (formerly Middleware)
