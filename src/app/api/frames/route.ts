@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
 import { sanitizeText } from "@/lib/sanitize"
-import { uploadFrame } from "@/lib/r2-storage"
+import { uploadFrame, getFreshSignedUrl } from "@/lib/r2-storage"
 
 export async function GET() {
     try {
@@ -17,7 +17,7 @@ export async function GET() {
 
         const { data, error } = await supabase
             .from('frames')
-            .select('*')
+            .select('*, booths(name), booth_sessions(name)')
             .eq('organization_id', orgId)
             .order('created_at', { ascending: false })
 
@@ -26,7 +26,13 @@ export async function GET() {
             return NextResponse.json({ error: "Failed to fetch frames" }, { status: 500 })
         }
 
-        return NextResponse.json({ data })
+        // Refresh signed URLs for all frames before returning
+        const framesWithFreshUrls = await Promise.all((data || []).map(async (frame) => ({
+            ...frame,
+            image_url: await getFreshSignedUrl(frame.image_url)
+        })))
+
+        return NextResponse.json({ data: framesWithFreshUrls })
 
     } catch (err: unknown) {
         console.error("/api/frames GET error", err)
@@ -58,7 +64,7 @@ export async function POST(req: NextRequest) {
         }
 
         const metadata = JSON.parse(metadataStr)
-        const { name, photo_slots, dimensions, price, booth_id } = metadata
+        const { name, photo_slots, dimensions, price, booth_id, booth_session_id } = metadata
 
         if (!name || !dimensions) {
             return NextResponse.json({ error: "Name and dimensions are required" }, { status: 400 })
@@ -86,6 +92,7 @@ export async function POST(req: NextRequest) {
                 canvas_height: dimensions.height,
                 price: price || 0,
                 booth_id: booth_id || null,
+                booth_session_id: booth_session_id || null,
                 is_active: true
             })
             .select()

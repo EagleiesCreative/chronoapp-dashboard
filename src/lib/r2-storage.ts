@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME!;
@@ -111,10 +111,94 @@ export async function uploadCapture(
   return await getSignedUrl(s3Client, command, { expiresIn: 604800 }); // Max 7 days
 }
 
+/**
+ * Generates a fresh signed URL for an existing object key or URL
+ */
+export async function getFreshSignedUrl(
+    keyOrUrl: string, 
+    expiresIn: number = 604800
+): Promise<string> {
+    try {
+        let key = keyOrUrl;
+
+        // If it's a full URL, try to extract the key
+        if (keyOrUrl.startsWith('http')) {
+            const urlObj = new URL(keyOrUrl);
+            
+            // If it's already using the public domain, no need to refresh
+            if (R2_PUBLIC_DOMAIN && keyOrUrl.startsWith(R2_PUBLIC_DOMAIN)) {
+                return keyOrUrl;
+            }
+
+            // Extract key from R2 storage URL (hostname contains r2.cloudflarestorage.com)
+            if (urlObj.hostname.includes('r2.cloudflarestorage.com')) {
+                let pathname = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+                
+                // If bucket name was part of the path (S3-style), remove it
+                if (pathname.startsWith(`${R2_BUCKET_NAME}/`)) {
+                    key = pathname.replace(`${R2_BUCKET_NAME}/`, '');
+                } else {
+                    key = pathname;
+                }
+            } else {
+                // Not an R2 URL we manage (or potentially a custom domain already), return as is
+                return keyOrUrl;
+            }
+        }
+
+        // Return public URL if configured
+        if (R2_PUBLIC_DOMAIN) {
+            return `${R2_PUBLIC_DOMAIN}/${key}`;
+        }
+
+        const command = new GetObjectCommand({
+            Bucket: R2_BUCKET_NAME,
+            Key: key,
+        });
+
+        return await getSignedUrl(s3Client, command, { expiresIn });
+    } catch (err) {
+        console.error("Error generating fresh signed URL:", err);
+        return keyOrUrl;
+    }
+}
+
+/**
+ * Deletes an object from R2 by its key or full URL
+ */
+export async function deleteFile(keyOrUrl: string): Promise<void> {
+    try {
+        let key = keyOrUrl;
+        if (keyOrUrl.startsWith('http')) {
+            const urlObj = new URL(keyOrUrl);
+            let pathname = urlObj.pathname.startsWith('/') ? urlObj.pathname.slice(1) : urlObj.pathname;
+            
+            // If bucket name was part of the path, remove it
+            if (pathname.startsWith(`${R2_BUCKET_NAME}/`)) {
+                key = pathname.replace(`${R2_BUCKET_NAME}/`, '');
+            } else {
+                key = pathname;
+            }
+        }
+
+        await s3Client.send(
+            new DeleteObjectCommand({
+                Bucket: R2_BUCKET_NAME,
+                Key: key,
+            })
+        );
+    } catch (err) {
+        console.error("Error deleting file from R2:", err);
+        // We don't throw here to allow database deletion to proceed even if R2 cleanup fails
+    }
+}
+
 export const r2Storage = {
     uploadReport,
     uploadFrame,
-    uploadCapture
+    uploadCapture,
+    getFreshSignedUrl,
+    deleteFile
 }
 
 export default r2Storage;

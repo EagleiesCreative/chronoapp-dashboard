@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { 
     Upload, 
     Plus, 
@@ -36,6 +36,7 @@ interface PhotoSlot {
     height: number
     rotation: number
     layer: 'above' | 'below'
+    capture_index: number
 }
 
 interface FrameData {
@@ -47,6 +48,7 @@ interface FrameData {
     canvas_height: number
     price: number
     booth_id?: string | null
+    booth_session_id?: string | null
 }
 
 interface FrameBuilderProps {
@@ -63,7 +65,7 @@ const CANVAS_PRESETS = [
     { id: "a3-l", name: "A3 (Landscape) - 4961x3508", width: 4961, height: 3508 },
 ]
 
-export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) {
+export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilderProps) {
     const [frame, setFrame] = useState<FrameData>(initialData || {
         name: "New Frame",
         image_url: "",
@@ -71,12 +73,61 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
         canvas_width: 600,
         canvas_height: 1050,
         price: 15000,
+        booth_id: null,
+        booth_session_id: null,
     })
+
+    const [booths, setBooths] = useState<any[]>([])
+    const [sessions, setSessions] = useState<any[]>([])
+    const [isLoadingBooths, setIsLoadingBooths] = useState(false)
+    const [isLoadingSessions, setIsLoadingSessions] = useState(false)
 
     const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null)
     const [isUploading, setIsUploading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // Fetch booths on mount
+    useEffect(() => {
+        async function fetchBooths() {
+            setIsLoadingBooths(true)
+            try {
+                const res = await fetch(`/api/booths?orgId=${orgId}`)
+                const data = await res.json()
+                if (res.ok) {
+                    setBooths(data.booths || [])
+                }
+            } catch (err) {
+                console.error("Failed to fetch booths", err)
+            } finally {
+                setIsLoadingBooths(false)
+            }
+        }
+        fetchBooths()
+    }, [orgId])
+
+    // Fetch sessions when booth changes
+    useEffect(() => {
+        async function fetchSessions() {
+            if (!frame.booth_id || frame.booth_id === 'none') {
+                setSessions([])
+                return
+            }
+            setIsLoadingSessions(true)
+            try {
+                const res = await fetch(`/api/booths/${frame.booth_id}/sessions`)
+                const data = await res.json()
+                if (res.ok) {
+                    setSessions(data.sessions || [])
+                }
+            } catch (err) {
+                console.error("Failed to fetch sessions", err)
+            } finally {
+                setIsLoadingSessions(false)
+            }
+        }
+        fetchSessions()
+    }, [frame.booth_id])
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
@@ -86,12 +137,14 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
         const formData = new FormData()
         formData.append('file', file)
         
-        // Temporary placeholder name if none exists
+        // Metadata for frame creation
         const metadata = {
             name: frame.name || file.name.split('.')[0],
             dimensions: { width: frame.canvas_width, height: frame.canvas_height },
             photo_slots: frame.photo_slots,
-            price: frame.price
+            price: frame.price,
+            booth_id: frame.booth_id === 'none' ? null : frame.booth_id,
+            booth_session_id: frame.booth_session_id === 'none' ? null : frame.booth_session_id
         }
         formData.append('metadata', JSON.stringify(metadata))
 
@@ -123,7 +176,8 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
             width: 500,
             height: 350,
             rotation: 0,
-            layer: 'below'
+            layer: 'below',
+            capture_index: frame.photo_slots.length
         }
         setFrame(prev => ({
             ...prev,
@@ -165,7 +219,9 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                     image_url: frame.image_url,
                     photo_slots: frame.photo_slots,
                     dimensions: { width: frame.canvas_width, height: frame.canvas_height },
-                    price: frame.price
+                    price: frame.price,
+                    booth_id: frame.booth_id === 'none' ? null : frame.booth_id,
+                    booth_session_id: frame.booth_session_id === 'none' ? null : frame.booth_session_id
                 })
             })
             
@@ -266,9 +322,9 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                             <Settings2 className="w-4 h-4 mr-2" />
                             Canvas
                         </TabsTrigger>
-                        <TabsTrigger value="slots" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                        <TabsTrigger value="layers" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
                             <Layers className="w-4 h-4 mr-2" />
-                            Slots ({frame.photo_slots.length})
+                            Layers ({frame.photo_slots.length})
                         </TabsTrigger>
                     </TabsList>
 
@@ -340,6 +396,56 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                                         className="bg-background/50"
                                     />
                                 </div>
+
+                                <div className="space-y-4 pt-2 border-t border-border/50">
+                                    <div className="space-y-2">
+                                        <Label>Assigned Booth</Label>
+                                        <Select 
+                                            value={frame.booth_id || 'none'} 
+                                            onValueChange={(val) => setFrame(prev => ({ ...prev, booth_id: val, booth_session_id: null }))}
+                                            disabled={isLoadingBooths}
+                                        >
+                                            <SelectTrigger className="bg-background/50 border-border/50">
+                                                <SelectValue placeholder={isLoadingBooths ? "Loading booths..." : "Select a booth..."} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None (Public)</SelectItem>
+                                                {booths.map(booth => (
+                                                    <SelectItem key={booth.id} value={booth.id}>
+                                                        {booth.name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    <div className="space-y-2">
+                                        <Label>Assigned Session</Label>
+                                        <Select 
+                                            value={frame.booth_session_id || 'none'} 
+                                            onValueChange={(val) => setFrame(prev => ({ ...prev, booth_session_id: val }))}
+                                            disabled={!frame.booth_id || frame.booth_id === 'none' || isLoadingSessions}
+                                        >
+                                            <SelectTrigger className="bg-background/50 border-border/50">
+                                                <SelectValue placeholder={
+                                                    !frame.booth_id || frame.booth_id === 'none' 
+                                                        ? "Select a booth first" 
+                                                        : isLoadingSessions 
+                                                            ? "Loading sessions..." 
+                                                            : "Select a session..."
+                                                } />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                {sessions.map(session => (
+                                                    <SelectItem key={session.id} value={session.id}>
+                                                        {session.name} {session.is_active ? "(Active)" : ""}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
                                 <Button 
                                     className="w-full mt-2 bg-primary/10 text-primary hover:bg-primary/20" 
                                     variant="outline"
@@ -353,10 +459,10 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="slots" className="space-y-4 pt-4 mt-0">
+                    <TabsContent value="layers" className="space-y-4 pt-4 mt-0">
                         <Button onClick={addSlot} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                             <Plus className="w-4 h-4 mr-2" />
-                            Add Photo Slot
+                            Add Layer / Slot
                         </Button>
 
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
@@ -380,8 +486,8 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                                                     #{index + 1}
                                                 </div>
                                                 <div className="text-xs">
-                                                    <div className="font-medium">Slot {index + 1}</div>
-                                                    <div className="text-muted-foreground">{slot.width}x{slot.height}px</div>
+                                                    <div className="font-medium">Layer {index + 1}</div>
+                                                    <div className="text-muted-foreground">Capture {slot.capture_index + 1} • {slot.width}x{slot.height}px</div>
                                                 </div>
                                             </div>
                                             <Button 
@@ -408,16 +514,33 @@ export function FrameBuilder({ initialData, onSaveSuccess }: FrameBuilderProps) 
                                 className="pt-4 space-y-6"
                             >
                                 <div className="flex items-center justify-between">
-                                    <h4 className="text-sm font-bold uppercase tracking-wider text-primary">Slot Configuration</h4>
-                                    <Button 
-                                        variant="outline" 
-                                        size="sm" 
-                                        className="h-7 text-[10px]"
-                                        onClick={() => updateSlot(selectedSlot.id, { layer: selectedSlot.layer === 'above' ? 'below' : 'above' })}
-                                    >
-                                        <Layers className="w-3 h-3 mr-1" />
-                                        Layer: {selectedSlot.layer}
-                                    </Button>
+                                    <h4 className="text-sm font-bold uppercase tracking-wider text-primary">Layer Configuration</h4>
+                                    <div className="flex gap-2">
+                                        <Select 
+                                            value={String(selectedSlot.capture_index)} 
+                                            onValueChange={(val) => updateSlot(selectedSlot.id, { capture_index: parseInt(val) })}
+                                        >
+                                            <SelectTrigger className="h-7 w-[110px] text-[10px] bg-background/50 border-border/50">
+                                                <SelectValue placeholder="Capture Index" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {[0, 1, 2, 3, 4, 5, 6, 7].map(idx => (
+                                                    <SelectItem key={idx} value={String(idx)} className="text-[10px]">
+                                                        Capture {idx + 1}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        <Button 
+                                            variant="outline" 
+                                            size="sm" 
+                                            className="h-7 text-[10px]"
+                                            onClick={() => updateSlot(selectedSlot.id, { layer: selectedSlot.layer === 'above' ? 'below' : 'above' })}
+                                        >
+                                            <Layers className="w-3 h-3 mr-1" />
+                                            {selectedSlot.layer}
+                                        </Button>
+                                    </div>
                                 </div>
 
                                 <div className="space-y-4">
@@ -547,7 +670,7 @@ function SlotPreview({ slot, isSelected, onClick, canvasWidth, canvasHeight }: S
         >
             <div className="opacity-40 flex flex-col items-center">
                 <Maximize2 className="w-4 h-4" />
-                <span className="text-[8px] font-bold mt-1">PHOTO SLOT</span>
+                <span className="text-[8px] font-bold mt-1">CAPTURE {slot.capture_index + 1}</span>
             </div>
             
             <AnimatePresence>

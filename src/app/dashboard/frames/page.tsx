@@ -2,8 +2,19 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useOrganization } from "@clerk/nextjs"
-import { Plus, Layout, Grid, Loader2, ArrowLeft } from "lucide-react"
+import { Plus, Layout, Grid, Loader2, ArrowLeft, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Card, CardContent } from "@/components/ui/card"
 import { FrameBuilder } from "@/components/dashboard/frames/FrameBuilder"
 import { motion, AnimatePresence } from "framer-motion"
@@ -18,6 +29,10 @@ interface Frame {
     canvas_height: number
     is_active: boolean
     price: number
+    booth_id?: string | null
+    booth_session_id?: string | null
+    booths?: { name: string } | null
+    booth_sessions?: { name: string } | null
 }
 
 interface PhotoSlot {
@@ -28,6 +43,7 @@ interface PhotoSlot {
     height: number
     rotation: number
     layer: 'above' | 'below'
+    capture_index: number
 }
 
 export default function FramesPage() {
@@ -36,6 +52,8 @@ export default function FramesPage() {
     const [frames, setFrames] = useState<Frame[]>([])
     const [loading, setLoading] = useState(true)
     const [selectedFrame, setSelectedFrame] = useState<Frame | null>(null)
+    const [frameToDelete, setFrameToDelete] = useState<Frame | null>(null)
+    const [deleting, setDeleting] = useState(false)
 
     const fetchFrames = useCallback(async () => {
         if (!organization?.id) return
@@ -72,6 +90,28 @@ export default function FramesPage() {
     const handleSaveSuccess = () => {
         setView('list')
         fetchFrames()
+    }
+
+    const handleDelete = async () => {
+        if (!frameToDelete) return
+        setDeleting(true)
+        try {
+            const res = await fetch(`/api/frames/${frameToDelete.id}`, {
+                method: 'DELETE'
+            })
+            if (res.ok) {
+                toast.success("Frame deleted successfully")
+                fetchFrames()
+                setFrameToDelete(null)
+            } else {
+                toast.error("Failed to delete frame")
+            }
+        } catch (err) {
+            console.error("Delete error:", err)
+            toast.error("Internal server error")
+        } finally {
+            setDeleting(false)
+        }
     }
 
     if (!isLoaded || !organization) {
@@ -153,15 +193,44 @@ export default function FramesPage() {
                                             </div>
                                             <CardContent className="p-4 bg-gradient-to-b from-transparent to-black/20">
                                                 <div className="flex items-center justify-between mb-1">
-                                                    <h3 className="font-semibold truncate">{frame.name}</h3>
-                                                    <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold uppercase">
-                                                        {frame.is_active ? 'Active' : 'Draft'}
-                                                    </span>
+                                                    <div className="flex-1 min-w-0 pr-2">
+                                                        <h3 className="font-semibold truncate">{frame.name}</h3>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-bold uppercase whitespace-nowrap">
+                                                            {frame.is_active ? 'Active' : 'Draft'}
+                                                        </span>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation()
+                                                                setFrameToDelete(frame)
+                                                            }}
+                                                        >
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    </div>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground flex items-center gap-2">
                                                     <Grid className="w-3 h-3" />
                                                     {frame.photo_slots?.length || 0} Slots • {frame.canvas_width}x{frame.canvas_height}
                                                 </p>
+                                                {(frame.booths?.name || frame.booth_sessions?.name) && (
+                                                    <div className="mt-2 space-y-1">
+                                                        {frame.booths?.name && (
+                                                            <p className="text-[10px] text-primary/70 font-medium truncate">
+                                                                Booth: {frame.booths.name}
+                                                            </p>
+                                                        )}
+                                                        {frame.booth_sessions?.name && (
+                                                            <p className="text-[10px] text-indigo-400 font-medium truncate">
+                                                                Session: {frame.booth_sessions.name}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </CardContent>
                                         </Card>
                                     </motion.div>
@@ -195,6 +264,38 @@ export default function FramesPage() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <AlertDialog open={!!frameToDelete} onOpenChange={(open) => !open && setFrameToDelete(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete Frame</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete <span className="font-semibold text-foreground">{frameToDelete?.name}</span>? 
+                            This action cannot be undone and will permanently remove the frame from our records and storage.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction 
+                            onClick={(e) => {
+                                e.preventDefault()
+                                handleDelete()
+                            }}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            disabled={deleting}
+                        >
+                            {deleting ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Deleting...
+                                </>
+                            ) : (
+                                'Delete'
+                            )}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }
