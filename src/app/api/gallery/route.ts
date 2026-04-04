@@ -8,6 +8,7 @@ interface SessionPhoto {
     created_at: string
     booth_name: string
     booth_id: string
+    event_name?: string
 }
 
 interface DateFolder {
@@ -47,6 +48,9 @@ export async function GET(req: NextRequest) {
                     id,
                     name,
                     organization_id
+                ),
+                booth_sessions (
+                    event_name
                 )
             `, { count: 'exact' })
             .not('final_image_url', 'is', null)
@@ -71,7 +75,8 @@ export async function GET(req: NextRequest) {
                 final_image_url: session.final_image_url,
                 created_at: session.created_at,
                 booth_name: session.booths?.name || 'Unknown Booth',
-                booth_id: session.booth_id
+                booth_id: session.booth_id,
+                event_name: session.booth_sessions?.event_name || undefined
             }
 
             if (!dateMap[dateKey]) {
