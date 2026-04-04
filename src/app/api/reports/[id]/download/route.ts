@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
-import { refreshSignedUrl } from "@/lib/r2-storage"
+import { getFreshSignedUrl } from "@/lib/r2-storage"
 
 export async function GET(
     req: NextRequest,
@@ -39,7 +39,7 @@ export async function GET(
 
         if (report.file_key) {
             try {
-                downloadUrl = await refreshSignedUrl(report.file_key)
+                downloadUrl = await getFreshSignedUrl(report.file_key)
 
                 // Update URL in database
                 await supabase

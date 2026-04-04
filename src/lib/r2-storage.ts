@@ -23,18 +23,30 @@ const s3Client = new S3Client({
 /**
  * Uploads a report buffer to R2 and returns the signed URL
  */
-export async function uploadReport(
-  buffer: Buffer,
-  filename: string,
-  contentType: string = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-): Promise<string> {
-  const key = `reports/${Date.now()}-${filename}`;
+export async function uploadReport({
+  organizationId,
+  year,
+  month,
+  format,
+  fileBuffer,
+}: {
+  organizationId: string;
+  year: number;
+  month: number;
+  format: 'excel' | 'pdf';
+  fileBuffer: Buffer;
+}): Promise<{ key: string; url: string; size: number }> {
+  const filename = `report-${organizationId}-${year}-${month}.${format === 'excel' ? 'xlsx' : 'pdf'}`;
+  const contentType = format === 'excel' 
+    ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+    : "application/pdf";
+  const key = `reports/${organizationId}/${Date.now()}-${filename}`;
 
   await s3Client.send(
     new PutObjectCommand({
       Bucket: R2_BUCKET_NAME,
       Key: key,
-      Body: buffer,
+      Body: fileBuffer,
       ContentType: contentType,
     })
   );
@@ -45,7 +57,13 @@ export async function uploadReport(
     Key: key,
   });
 
-  return await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  const url = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+  
+  return {
+    key,
+    url,
+    size: fileBuffer.length
+  };
 }
 
 /**
