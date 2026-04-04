@@ -110,47 +110,28 @@ export async function DELETE(
             return NextResponse.json({ error: "Not authorized" }, { status: 404 })
         }
 
-        // 1. Check for session references before deleting
-        const { count: sessionCount, error: sessionCheckError } = await supabase
-            .from('sessions')
-            .select('*', { count: 'exact', head: true })
-            .eq('frame_id', id)
-
-        if (sessionCheckError) {
-            console.error("Error checking session references:", sessionCheckError)
-        }
-
-        if (sessionCount && sessionCount > 0) {
-            return NextResponse.json({ 
-                error: `Cannot delete: This frame is in use by ${sessionCount} sessions. Try deactivating it instead.` 
-            }, { status: 409 })
-        }
-
-        // 2. Cleanup R2
-        if (existingFrame.image_url) {
-            await deleteFile(existingFrame.image_url)
-        }
-
-        // 3. Perform delete
-        const { error: deleteError } = await supabase
-            .from('frames')
+        // 1. Remove from active booth sessions so it stops appearing as an option
+        const { error: unlinkError } = await supabase
+            .from('booth_session_frames')
             .delete()
+            .eq('frame_id', id)
+            
+        if (unlinkError) {
+            console.error("Error unlinking frame from active sessions:", unlinkError)
+        }
+
+        // 2. Perform ARCHIVE (soft delete)
+        const { error: archiveError } = await supabase
+            .from('frames')
+            .update({ is_archived: true, is_active: false })
             .eq('id', id)
 
-        if (deleteError) {
-            console.error("/api/frames/[id] DELETE error:", deleteError)
-            
-            // Handle foreign key constraint error (PostgreSQL code 23503)
-            if (deleteError.code === '23503') {
-                return NextResponse.json({ 
-                    error: "This frame is currently in use and cannot be deleted. Try deactivating it instead." 
-                }, { status: 409 })
-            }
-            
-            return NextResponse.json({ error: "Failed to delete frame" }, { status: 500 })
+        if (archiveError) {
+            console.error("/api/frames/[id] DELETE archive error:", archiveError)
+            return NextResponse.json({ error: "Failed to archive frame" }, { status: 500 })
         }
 
-        return NextResponse.json({ success: true })
+        return NextResponse.json({ success: true, archived: true })
 
     } catch (err: unknown) {
         console.error("/api/frames/[id] DELETE error", err)

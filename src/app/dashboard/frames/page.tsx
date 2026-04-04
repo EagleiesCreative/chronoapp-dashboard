@@ -100,11 +100,11 @@ export default function FramesPage() {
                 method: 'DELETE'
             })
             if (res.ok) {
-                toast.success("Frame deleted successfully")
+                toast.success("Frame archived successfully")
                 fetchFrames()
                 setFrameToDelete(null)
             } else {
-                toast.error("Failed to delete frame")
+                toast.error("Failed to archive frame")
             }
         } catch (err) {
             console.error("Delete error:", err)
@@ -268,10 +268,10 @@ export default function FramesPage() {
             <AlertDialog open={!!frameToDelete} onOpenChange={(open) => !open && setFrameToDelete(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Frame</AlertDialogTitle>
+                        <AlertDialogTitle>Archive Frame</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Are you sure you want to delete <span className="font-semibold text-foreground">{frameToDelete?.name}</span>? 
-                            This action cannot be undone and will permanently remove the frame from our records and storage.
+                            Are you sure you want to archive <span className="font-semibold text-foreground">{frameToDelete?.name}</span>? 
+                            This frame will be hidden from the library but kept in the database to preserve historical session data. It will no longer be available for new sessions.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -287,10 +287,10 @@ export default function FramesPage() {
                             {deleting ? (
                                 <>
                                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                    Deleting...
+                                    Archiving...
                                 </>
                             ) : (
-                                'Delete'
+                                'Archive'
                             )}
                         </AlertDialogAction>
                     </AlertDialogFooter>

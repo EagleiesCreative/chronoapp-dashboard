@@ -19,6 +19,7 @@ export async function GET() {
             .from('frames')
             .select('*, booths(name), booth_sessions(name)')
             .eq('organization_id', orgId)
+            .eq('is_archived', false)
             .order('created_at', { ascending: false })
 
         if (error) {
