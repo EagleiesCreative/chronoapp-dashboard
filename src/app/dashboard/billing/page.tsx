@@ -19,22 +19,33 @@ import {
     IconX,
     IconArrowUp,
     IconArrowDown,
+    IconDeviceDesktop,
+    IconPlus,
 } from "@tabler/icons-react"
 import Link from "next/link"
 
-interface Subscription {
+interface Booth {
+    id: string
+    name: string
     subscription_plan: string
     subscription_status: string
     subscription_expires_at: string | null
-    max_booths: number
+    addons: string[]
 }
 
 interface Plan {
     id: string
     name: string
     price: number
-    max_booths: number
     features: Record<string, boolean>
+}
+
+interface Addon {
+    id: string
+    name: string
+    description: string
+    price: number
+    interval: string
 }
 
 interface SubscriptionHistory {
@@ -59,17 +70,17 @@ function BillingContent() {
     const { organization } = useOrganization()
     const searchParams = useSearchParams()
     const [loading, setLoading] = useState(true)
-    const [subscription, setSubscription] = useState<Subscription | null>(null)
+    const [booths, setBooths] = useState<Booth[]>([])
     const [plans, setPlans] = useState<Plan[]>([])
+    const [addons, setAddons] = useState<Addon[]>([])
     const [history, setHistory] = useState<SubscriptionHistory[]>([])
     const [pendingInvoice, setPendingInvoice] = useState<PendingInvoice | null>(null)
-    const [upgrading, setUpgrading] = useState(false)
+    const [processingItem, setProcessingItem] = useState<string | null>(null) // '{boothId}-{plan/addon}'
 
-    // Handle payment redirect status
     useEffect(() => {
         const paymentStatus = searchParams.get('payment')
         if (paymentStatus === 'success') {
-            toast.success('Payment successful! Your subscription is being activated.')
+            toast.success('Payment successful! Your purchase is being activated.')
         } else if (paymentStatus === 'failed') {
             toast.error('Payment failed or was cancelled. Please try again.')
         }
@@ -82,13 +93,14 @@ function BillingContent() {
             try {
                 const res = await fetch(`/api/subscriptions?orgId=${organization.id}`)
                 const data = await res.json()
-                setSubscription(data.subscription)
+                setBooths(data.booths || [])
                 setPlans(data.plans || [])
+                setAddons(data.addons || [])
                 setHistory(data.history || [])
                 setPendingInvoice(data.pendingInvoice || null)
             } catch (error) {
-                console.error('Error fetching subscription:', error)
-                toast.error('Failed to load subscription details')
+                console.error('Error fetching billing details:', error)
+                toast.error('Failed to load billing details')
             } finally {
                 setLoading(false)
             }
@@ -97,21 +109,31 @@ function BillingContent() {
         fetchData()
     }, [organization])
 
-    const handleUpgrade = async (planId: string) => {
+    const handlePurchase = async (boothId: string, itemType: 'plan' | 'addon', itemId: string) => {
         if (!organization) return
+        
+        if (itemType === 'plan' && itemId === 'growth') {
+             if (!confirm('Are you sure you want to downgrade this booth to the Growth plan? Features will immediately become limited.')) return;
+        }
 
-        setUpgrading(true)
+        const processingKey = `${boothId}-${itemId}`
+        setProcessingItem(processingKey)
+
         try {
+            const body: any = { orgId: organization.id, boothId }
+            if (itemType === 'plan') body.planId = itemId
+            if (itemType === 'addon') body.addonId = itemId
+
             const res = await fetch('/api/subscriptions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orgId: organization.id, planId })
+                body: JSON.stringify(body)
             })
 
             const data = await res.json()
 
             if (!res.ok) {
-                toast.error(data.error || 'Failed to process upgrade')
+                toast.error(data.error || 'Failed to process purchase')
                 return
             }
 
@@ -119,30 +141,30 @@ function BillingContent() {
                 toast.info('Redirecting to payment...')
                 window.location.href = data.payment_url
             } else if (data.success) {
-                toast.success('Subscription updated!')
+                toast.success('Booth subscription updated!')
                 window.location.reload()
             }
         } catch (error) {
-            console.error('Error upgrading:', error)
-            toast.error('Failed to upgrade subscription')
+            console.error('Error with purchase:', error)
+            toast.error('Failed to initiate purchase')
         } finally {
-            setUpgrading(false)
+            setProcessingItem(null)
         }
     }
 
-    const handleCancel = async () => {
+    const handleCancel = async (boothId: string) => {
         if (!organization) return
-        if (!confirm('Are you sure you want to cancel your subscription? You will lose access to Pro features at the end of your billing period.')) {
+        if (!confirm('Are you sure you want to cancel the paid subscription for this booth? It will revert to the Growth plan at the end of the billing period.')) {
             return
         }
 
         try {
-            const res = await fetch(`/api/subscriptions?orgId=${organization.id}`, {
+            const res = await fetch(`/api/subscriptions?boothId=${boothId}`, {
                 method: 'DELETE'
             })
 
             if (res.ok) {
-                toast.success('Subscription cancelled. You will retain Pro features until the end of your billing period.')
+                toast.success('Subscription cancelled. You will retain premium features until the expiration date.')
                 window.location.reload()
             }
         } catch (error) {
@@ -152,13 +174,16 @@ function BillingContent() {
     }
 
     const getActionDisplay = (action: string) => {
+        if (action.includes('purchased_addon')) {
+             return { label: 'Add-on Purchased', icon: <IconPlus className="h-4 w-4 text-primary" />, color: 'text-primary' }
+        }
+        if (action.includes('upgraded')) {
+            return { label: 'Plan Upgraded', icon: <IconArrowUp className="h-4 w-4 text-green-500" />, color: 'text-green-600' }
+        }
+        if (action.includes('downgraded')) {
+             return { label: 'Plan Downgraded', icon: <IconArrowDown className="h-4 w-4 text-orange-500" />, color: 'text-orange-600' }
+        }
         switch (action) {
-            case 'upgraded':
-                return { label: 'Upgraded to Pro', icon: <IconArrowUp className="h-4 w-4 text-green-500" />, color: 'text-green-600' }
-            case 'downgraded':
-                return { label: 'Downgraded to Basic', icon: <IconArrowDown className="h-4 w-4 text-orange-500" />, color: 'text-orange-600' }
-            case 'cancelled':
-                return { label: 'Cancelled', icon: <IconX className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
             case 'payment_initiated':
                 return { label: 'Payment Initiated', icon: <IconClock className="h-4 w-4 text-blue-500" />, color: 'text-blue-600' }
             case 'payment_failed':
@@ -166,13 +191,12 @@ function BillingContent() {
             case 'payment_expired':
                 return { label: 'Payment Expired', icon: <IconClock className="h-4 w-4 text-amber-500" />, color: 'text-amber-600' }
             default:
+                if (action.includes('cancelled')) {
+                     return { label: 'Subscription Cancelled', icon: <IconX className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
+                }
                 return { label: action, icon: <IconReceipt className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' }
         }
     }
-
-    const currentPlan = plans.find(p => p.id === subscription?.subscription_plan) || plans[0]
-    const isPro = subscription?.subscription_plan === 'pro'
-    const isCancelled = subscription?.subscription_status === 'cancelled'
 
     if (loading) {
         return (
@@ -188,9 +212,9 @@ function BillingContent() {
     return (
         <div className="flex flex-col gap-6 p-4 md:p-6">
             <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Billing & Subscription</h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Billing & Subscriptions</h1>
                 <p className="text-sm text-muted-foreground">
-                    Manage your subscription and billing information
+                    Manage plans and add-ons individually for your active booths.
                 </p>
             </div>
 
@@ -207,7 +231,7 @@ function BillingContent() {
                                     Payment Pending
                                 </p>
                                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                                    Complete your payment of Rp {pendingInvoice.amount.toLocaleString('id-ID')} to activate Pro plan
+                                    Complete your payment of Rp {pendingInvoice.amount.toLocaleString('id-ID')}
                                 </p>
                             </div>
                         </div>
@@ -222,177 +246,191 @@ function BillingContent() {
                 </Card>
             )}
 
-            {/* Current Plan */}
-            <Card>
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="flex items-center gap-2">
-                                Current Plan
-                                {isPro && <IconSparkles className="h-5 w-5 text-primary" />}
-                            </CardTitle>
-                            <CardDescription>
-                                {isPro ? 'You have access to all premium features' : 'Upgrade to unlock more features'}
-                            </CardDescription>
-                        </div>
-                        <Badge variant={isPro ? 'default' : 'secondary'} className="text-lg px-4 py-1">
-                            {currentPlan?.name || 'Basic'}
-                        </Badge>
-                    </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Status</p>
-                            <p className="font-medium flex items-center gap-1">
-                                {isCancelled ? (
-                                    <>
-                                        <IconAlertTriangle className="h-4 w-4 text-yellow-500" />
-                                        Cancelled
-                                    </>
-                                ) : (
-                                    <>
-                                        <IconCheck className="h-4 w-4 text-green-500" />
-                                        Active
-                                    </>
-                                )}
-                            </p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Booth Limit</p>
-                            <p className="font-medium">{subscription?.max_booths || 1} booth(s)</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Price</p>
-                            <p className="font-medium">
-                                {currentPlan?.price === 0 ? 'Free' : `Rp ${currentPlan?.price.toLocaleString('id-ID')}/mo`}
-                            </p>
-                        </div>
-                        {subscription?.subscription_expires_at && (
-                            <div className="space-y-1">
-                                <p className="text-sm text-muted-foreground">
-                                    {isCancelled ? 'Access Until' : 'Next Billing'}
-                                </p>
-                                <p className="font-medium">
-                                    {new Date(subscription.subscription_expires_at).toLocaleDateString('id-ID')}
-                                </p>
-                            </div>
-                        )}
-                    </div>
+            {/* Booth Mapping */}
+            {booths.length === 0 ? (
+                 <Card>
+                     <CardContent className="py-10 text-center">
+                         <IconDeviceDesktop className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
+                         <h3 className="text-lg font-medium">No Booths Found</h3>
+                         <p className="text-muted-foreground mb-4">Create a booth to start managing its subscription.</p>
+                         <Button asChild>
+                             <Link href="/dashboard/booths">Go to Booths</Link>
+                         </Button>
+                     </CardContent>
+                 </Card>
+            ) : (
+                <div className="space-y-6">
+                    {booths.map(booth => {
+                        const currentPlan = plans.find(p => p.id === (booth.subscription_plan || 'growth')) || plans[0]
+                        const isPro = currentPlan.id !== 'growth'
+                        const isCancelled = booth.subscription_status === 'cancelled'
+                        const boothAddons = addons.filter(a => booth.addons?.includes(a.id))
+                        const availableAddons = addons.filter(a => !booth.addons?.includes(a.id))
 
-                    {isCancelled && (
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                                Your subscription has been cancelled. You'll retain Pro features until the end of your billing period.
-                                You can reactivate anytime.
-                            </p>
-                        </div>
-                    )}
-                </CardContent>
-                <CardFooter className="flex gap-2">
-                    {!isPro ? (
-                        <Button onClick={() => handleUpgrade('pro')} disabled={upgrading || !!pendingInvoice}>
-                            {upgrading ? (
-                                <>
-                                    <IconLoader className="h-4 w-4 mr-2 animate-spin" />
-                                    Processing...
-                                </>
-                            ) : pendingInvoice ? (
-                                'Payment Pending...'
-                            ) : (
-                                <>
-                                    <IconSparkles className="h-4 w-4 mr-2" />
-                                    Upgrade to Pro
-                                </>
-                            )}
-                        </Button>
-                    ) : !isCancelled ? (
-                        <Button variant="outline" onClick={handleCancel}>
-                            Cancel Subscription
-                        </Button>
-                    ) : (
-                        <Button onClick={() => handleUpgrade('pro')} disabled={upgrading}>
-                            {upgrading ? 'Processing...' : 'Reactivate Pro'}
-                        </Button>
-                    )}
-                </CardFooter>
-            </Card>
+                        return (
+                             <Card key={booth.id} className={isPro ? "border-primary/50 overflow-hidden" : "overflow-hidden"}>
+                                {isPro && (
+                                     <div className="bg-primary h-1 w-full" />
+                                )}
+                                <CardHeader className="pb-2">
+                                     <div className="flex items-start justify-between">
+                                         <div>
+                                             <CardTitle className="flex items-center gap-2 text-xl">
+                                                 {booth.name}
+                                                 {isPro && <IconSparkles className="h-5 w-5 text-primary" />}
+                                             </CardTitle>
+                                             <CardDescription className="mt-1">
+                                                 {currentPlan.name} Plan
+                                             </CardDescription>
+                                         </div>
+                                         <Badge variant={isCancelled ? "destructive" : isPro ? "default" : "secondary"} className="uppercase tracking-wider text-[10px] font-semibold">
+                                             {isCancelled ? "Cancelled" : (isPro ? "Premium" : "Free")}
+                                         </Badge>
+                                     </div>
+                                </CardHeader>
+                                <CardContent className="pt-6">
+                                     <div className="flex flex-col md:flex-row gap-8">
+                                         {/* Main Info */}
+                                         <div className="flex-1 space-y-4">
+                                             <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Plan Details</h4>
+                                             <div className="flex flex-wrap gap-x-12 gap-y-4">
+                                                <div className="space-y-1">
+                                                    <p className="text-xs text-muted-foreground">Price</p>
+                                                    <p className="text-sm font-medium">
+                                                        {currentPlan.price === 0 ? 'Free' : `Rp ${currentPlan.price.toLocaleString('id-ID')}/mo`}
+                                                    </p>
+                                                </div>
+                                                {booth.subscription_expires_at && (
+                                                    <div className="space-y-1">
+                                                        <p className="text-xs text-muted-foreground">
+                                                            {isCancelled ? 'Access Until' : 'Next Billing'}
+                                                        </p>
+                                                        <p className="text-sm font-medium">
+                                                            {new Date(booth.subscription_expires_at).toLocaleDateString('id-ID')}
+                                                        </p>
+                                                    </div>
+                                                )}
+                                             </div>
 
-            {/* Plan Comparison */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Plan Comparison</CardTitle>
-                    <CardDescription>See what's included in each plan</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {plans.map((plan) => (
-                            <div
-                                key={plan.id}
-                                className={`p-4 rounded-lg border ${plan.id === subscription?.subscription_plan
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-muted'
-                                    }`}
-                            >
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-semibold text-lg">{plan.name}</h3>
-                                    <span className="font-bold">
-                                        {plan.price === 0 ? 'Free' : `Rp ${plan.price.toLocaleString('id-ID')}/mo`}
-                                    </span>
-                                </div>
-                                <ul className="space-y-2">
-                                    <li className="flex items-center gap-2 text-sm">
-                                        <IconCheck className="h-4 w-4 text-primary" />
-                                        {plan.max_booths} booth(s)
-                                    </li>
-                                    {Object.entries(plan.features).map(([feature, enabled]) => (
-                                        <li key={feature} className="flex items-center gap-2 text-sm">
-                                            {enabled ? (
-                                                <IconCheck className="h-4 w-4 text-primary" />
-                                            ) : (
-                                                <span className="h-4 w-4 text-muted-foreground">×</span>
-                                            )}
-                                            <span className={enabled ? '' : 'text-muted-foreground'}>
-                                                {feature.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                            </span>
-                                        </li>
-                                    ))}
-                                </ul>
-                                {plan.id !== subscription?.subscription_plan && (
-                                    <Button
-                                        className="w-full mt-4"
-                                        variant={plan.id === 'pro' ? 'default' : 'outline'}
-                                        onClick={() => handleUpgrade(plan.id)}
-                                        disabled={upgrading || (plan.id === 'pro' && !!pendingInvoice)}
-                                    >
-                                        {plan.id === 'pro' ? (pendingInvoice ? 'Payment Pending...' : 'Upgrade') : 'Downgrade'}
-                                    </Button>
-                                )}
-                                {plan.id === subscription?.subscription_plan && (
-                                    <div className="mt-4 text-center text-sm text-muted-foreground">
-                                        Current Plan
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </CardContent>
-            </Card>
+                                             {boothAddons.length > 0 && (
+                                                  <div className="pt-2">
+                                                      <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Active Add-ons</p>
+                                                      <div className="flex flex-wrap gap-2">
+                                                           {boothAddons.map(a => (
+                                                                <Badge key={a.id} variant="secondary" className="font-normal border">
+                                                                    <IconCheck className="w-3 h-3 mr-1 text-primary" /> {a.name}
+                                                                </Badge>
+                                                           ))}
+                                                      </div>
+                                                  </div>
+                                             )}
+                                         </div>
+                                         
+                                         {/* Allowed Features Snippet */}
+                                         <div className="flex-1 space-y-4 md:border-l md:pl-8 border-border">
+                                              <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Included Features</h4>
+                                              <ul className="grid grid-cols-1 gap-2 text-sm">
+                                                  {Object.entries(currentPlan.features).map(([key, val]) => val && (
+                                                      <li key={key} className="flex items-center gap-2 text-muted-foreground">
+                                                          <IconCheck className="w-4 h-4 text-primary" />
+                                                          <span>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                                                      </li>
+                                                  ))}
+                                              </ul>
+                                         </div>
+                                     </div>
+                                </CardContent>
+                                <CardFooter className="pt-2 pb-6 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+                                     <div className="flex flex-wrap gap-2">
+                                         {/* Plan upgrades */}
+                                         {plans.map(p => {
+                                             if (p.id === currentPlan.id) return null;
+                                             // Only show upgrade to pro or panoramic
+                                             if (currentPlan.id === 'growth' && p.id !== 'growth') {
+                                                 return (
+                                                     <Button 
+                                                        key={p.id} 
+                                                        variant={p.id === 'professional' ? 'default' : 'outline'} 
+                                                        size="sm"
+                                                        onClick={() => handlePurchase(booth.id, 'plan', p.id)}
+                                                        disabled={!!processingItem || !!pendingInvoice}
+                                                     >
+                                                         {processingItem === `${booth.id}-${p.id}` ? <IconLoader className="h-4 w-4 mr-2 animate-spin" /> : <IconArrowUp className="h-4 w-4 mr-1"/>}
+                                                         Upgrade to {p.name}
+                                                     </Button>
+                                                 )
+                                             }
+                                             // If Pro, show downgrade to Growth or upgrade to panoramic
+                                             if (currentPlan.id === 'professional') {
+                                                 if (p.id === 'panoramic-plus') {
+                                                     return (
+                                                         <Button 
+                                                            key={p.id} 
+                                                            variant="outline" 
+                                                            size="sm"
+                                                            onClick={() => handlePurchase(booth.id, 'plan', p.id)}
+                                                            disabled={!!processingItem || !!pendingInvoice}
+                                                         >
+                                                             {processingItem === `${booth.id}-${p.id}` ? <IconLoader className="h-4 w-4 mr-2 animate-spin" /> : <IconArrowUp className="h-4 w-4 mr-1"/>}
+                                                             Upgrade
+                                                         </Button>
+                                                     )
+                                                 }
+                                             }
+                                             // Provide general cancel button instead of manual downgrade
+                                             return null;
+                                         })}
+
+                                         {isPro && !isCancelled && (
+                                             <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" size="sm" onClick={() => handleCancel(booth.id)}>
+                                                 Cancel Plan
+                                             </Button>
+                                         )}
+                                     </div>
+                                     
+                                     {/* Addons Box */}
+                                     {availableAddons.length > 0 && isPro && (
+                                          <div className="flex flex-wrap gap-2 items-center">
+                                              <span className="text-xs text-muted-foreground mr-1 uppercase tracking-wider font-semibold">Available Add-ons:</span>
+                                              {availableAddons.map(a => (
+                                                  <Button 
+                                                      key={a.id} 
+                                                      variant="secondary" 
+                                                      size="sm"
+                                                      onClick={() => handlePurchase(booth.id, 'addon', a.id)}
+                                                      disabled={!!processingItem || !!pendingInvoice}
+                                                      title={`Rp ${a.price.toLocaleString('id-ID')} (One-time)`}
+                                                  >
+                                                      {processingItem === `${booth.id}-${a.id}` ? <IconLoader className="h-4 w-4 mr-1 animate-spin" /> : <IconPlus className="h-3 w-3 mr-1" />}
+                                                      {a.name}
+                                                  </Button>
+                                              ))}
+                                          </div>
+                                     )}
+                                     {!isPro && availableAddons.length > 0 && (
+                                          <p className="text-xs text-muted-foreground">Upgrade to purchase add-ons.</p>
+                                     )}
+                                </CardFooter>
+                             </Card>
+                        )
+                    })}
+                </div>
+            )}
 
             {/* Payment Method */}
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <IconCreditCard className="h-5 w-5" />
-                        Payment Method
+                        Base Payment Methods
                     </CardTitle>
                     <CardDescription>
-                        Manage your payment information
+                        Supported infrastructure
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <p className="text-muted-foreground">
-                        Payments are processed securely via Xendit. You can pay using bank transfer (BCA, BNI, BRI, Mandiri), e-wallet (OVO, DANA, GoPay), QRIS, or credit card.
+                        Payments are processed securely via Xendit. We support bank transfer (BCA, BNI, BRI, Mandiri), e-wallet (OVO, DANA, GoPay), QRIS, and credit cards.
                     </p>
                 </CardContent>
             </Card>
@@ -406,23 +444,30 @@ function BillingContent() {
                             Billing History
                         </CardTitle>
                         <CardDescription>
-                            Your recent subscription activity
+                            Your recent subscription activity across all booths
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-3">
+                        <div className="divide-y divide-border">
                             {history.map((entry) => {
                                 const display = getActionDisplay(entry.action)
                                 return (
                                     <div
                                         key={entry.id}
-                                        className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
+                                        className="flex items-center justify-between py-3"
                                     >
                                         <div className="flex items-center gap-3">
-                                            {display.icon}
+                                            <div className="p-2 bg-muted/50 rounded-full border border-border">
+                                                {display.icon}
+                                            </div>
                                             <div>
                                                 <p className={`text-sm font-medium ${display.color}`}>
                                                     {display.label}
+                                                    {entry.action.includes('_') && !['payment_initiated', 'payment_failed', 'payment_expired'].includes(entry.action) && (
+                                                         <span className="text-muted-foreground font-normal ml-2">
+                                                             ({entry.action.split('_').pop()})
+                                                         </span>
+                                                    )}
                                                 </p>
                                                 <p className="text-xs text-muted-foreground">
                                                     {new Date(entry.created_at).toLocaleDateString('id-ID', {
@@ -436,8 +481,9 @@ function BillingContent() {
                                             </div>
                                         </div>
                                         {entry.amount > 0 && (
-                                            <span className="text-sm font-mono font-medium">
+                                            <span className="text-sm font-mono font-medium flex flex-col items-end">
                                                 Rp {Number(entry.amount).toLocaleString('id-ID')}
+                                                {entry.plan_id && <span className="text-[10px] text-muted-foreground uppercase mt-0.5">{entry.plan_id}</span>}
                                             </span>
                                         )}
                                     </div>
@@ -448,20 +494,6 @@ function BillingContent() {
                 </Card>
             )}
 
-            {/* Need Help */}
-            <Card className="bg-muted/30">
-                <CardHeader>
-                    <CardTitle>Need Help?</CardTitle>
-                    <CardDescription>
-                        Contact our support team for billing inquiries
-                    </CardDescription>
-                </CardHeader>
-                <CardFooter>
-                    <Button variant="outline" asChild>
-                        <Link href="/dashboard/support">Contact Support</Link>
-                    </Button>
-                </CardFooter>
-            </Card>
         </div>
     )
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase-server'
+import { PLANS, ADDONS, PlanId, AddonId } from '@/lib/pricing'
 
 // Webhook handler for Xendit payment callbacks (subscription payments)
 export async function POST(req: NextRequest) {
@@ -20,95 +21,102 @@ export async function POST(req: NextRequest) {
 
         const { external_id, status, paid_amount, payment_method, id: invoiceId } = body
 
-        // external_id format: sub_{orgId}_{timestamp}
-        // orgId may itself contain underscores, so we parse carefully:
-        // "sub_" prefix (4 chars) + everything up to the last "_" is the orgId
+        // external_id format: sub_{boothId}_{purchaseItem}_{timestamp}
         if (!external_id?.startsWith('sub_')) {
             return NextResponse.json({ message: 'Not a subscription payment' }, { status: 200 })
         }
 
-        const withoutPrefix = external_id.slice(4) // remove "sub_"
-        const lastUnderscoreIdx = withoutPrefix.lastIndexOf('_')
-        if (lastUnderscoreIdx === -1) {
+        const parts = external_id.split('_')
+        if (parts.length < 4) {
             return NextResponse.json({ error: 'Invalid external_id format' }, { status: 400 })
         }
 
-        const orgId = withoutPrefix.slice(0, lastUnderscoreIdx)
+        const boothId = parts[1]
+        const purchaseItem = parts[2] // planId or addonId
+
+        // Fetch original booth to get org_id and current addons
+        const { data: booth } = await supabase
+            .from('booths')
+            .select('id, organization_id, name, addons')
+            .eq('id', boothId)
+            .single()
+
+        if (!booth) {
+             console.error(`Booth ${boothId} not found during webhook process`)
+             return NextResponse.json({ error: 'Booth not found' }, { status: 404 })
+        }
+
+        const orgId = booth.organization_id
 
         if (status === 'PAID' || status === 'SETTLED') {
-            // Calculate expiration (30 days from now)
-            const expiresAt = new Date()
-            expiresAt.setDate(expiresAt.getDate() + 30)
+            const isPlan = Object.keys(PLANS).includes(purchaseItem)
+            const isAddon = Object.keys(ADDONS).includes(purchaseItem)
 
-            // Update organization subscription
-            const { error: updateError } = await supabase
-                .from('organizations')
-                .update({
-                    subscription_plan: 'pro',
-                    subscription_status: 'active',
-                    subscription_expires_at: expiresAt.toISOString(),
-                    max_booths: 5,
-                    xendit_invoice_id: null, // Clear pending invoice
+            if (isPlan) {
+                // Calculate expiration (30 days from now)
+                const expiresAt = new Date()
+                expiresAt.setDate(expiresAt.getDate() + 30)
+
+                // Update booth subscription
+                const { error: updateError } = await supabase
+                    .from('booths')
+                    .update({
+                        subscription_plan: purchaseItem,
+                        subscription_status: 'active',
+                        subscription_expires_at: expiresAt.toISOString(),
+                    })
+                    .eq('id', boothId)
+
+                if (updateError) throw updateError
+
+                await supabase.from('subscription_history').insert({
+                    organization_id: orgId,
+                    plan_id: purchaseItem,
+                    action: `upgraded_${booth.name.replace(/\s+/g, '')}`,
+                    amount: paid_amount,
+                    payment_method: payment_method || 'xendit',
+                    payment_id: invoiceId || external_id,
                 })
-                .eq('id', orgId)
+                
+            } else if (isAddon) {
+                // Determine new addons array
+                const currentAddons = booth.addons || []
+                const newAddons = [...new Set([...currentAddons, purchaseItem])]
 
-            if (updateError) {
-                console.error('Error updating subscription:', updateError)
-                return NextResponse.json({ error: 'Failed to update subscription' }, { status: 500 })
+                const { error: updateError } = await supabase
+                    .from('booths')
+                    .update({
+                        addons: newAddons
+                    })
+                    .eq('id', boothId)
+
+                if (updateError) throw updateError
+
+                await supabase.from('subscription_history').insert({
+                    organization_id: orgId,
+                    plan_id: purchaseItem,
+                    action: `purchased_addon_${booth.name.replace(/\s+/g, '')}`,
+                    amount: paid_amount,
+                    payment_method: payment_method || 'xendit',
+                    payment_id: invoiceId || external_id,
+                })
             }
 
-            // Log subscription history
-            await supabase.from('subscription_history').insert({
-                organization_id: orgId,
-                plan_id: 'pro',
-                action: 'upgraded',
-                amount: paid_amount,
-                payment_method: payment_method || 'xendit',
-                payment_id: invoiceId || external_id,
-            })
-
-            console.log(`✅ Subscription activated for org ${orgId}, expires ${expiresAt.toISOString()}`)
-
-            return NextResponse.json({ success: true, message: 'Subscription activated' })
+            console.log(`✅ Payment successful for booth ${boothId}, item: ${purchaseItem}`)
+            return NextResponse.json({ success: true, message: 'Purchase activated' })
         }
 
-        if (status === 'EXPIRED') {
-            // Invoice expired — clear xendit_invoice_id so user can try again
-            await supabase
-                .from('organizations')
-                .update({ xendit_invoice_id: null })
-                .eq('id', orgId)
-
+        // Handle failures/expiration
+        if (status === 'EXPIRED' || status === 'FAILED') {
             await supabase.from('subscription_history').insert({
                 organization_id: orgId,
-                plan_id: 'pro',
-                action: 'payment_expired',
+                plan_id: purchaseItem,
+                action: status === 'EXPIRED' ? 'payment_expired' : 'payment_failed',
                 amount: paid_amount || 0,
                 payment_id: invoiceId || external_id,
             })
 
-            console.log(`⚠️ Payment expired for org ${orgId}`)
-
-            return NextResponse.json({ success: true, message: 'Payment expiry logged' })
-        }
-
-        if (status === 'FAILED') {
-            await supabase
-                .from('organizations')
-                .update({ xendit_invoice_id: null })
-                .eq('id', orgId)
-
-            await supabase.from('subscription_history').insert({
-                organization_id: orgId,
-                plan_id: 'pro',
-                action: 'payment_failed',
-                amount: paid_amount || 0,
-                payment_id: invoiceId || external_id,
-            })
-
-            console.log(`❌ Payment failed for org ${orgId}`)
-
-            return NextResponse.json({ success: true, message: 'Payment failure logged' })
+            return NextResponse.json({ success: true, message: `Payment ${status.toLowerCase()} logged` })
         }
 
         return NextResponse.json({ message: 'Status not handled', status })
@@ -118,7 +126,6 @@ export async function POST(req: NextRequest) {
     }
 }
 
-// Allow GET for webhook verification
 export async function GET() {
     return NextResponse.json({ status: 'ok', message: 'Subscription webhook endpoint' })
 }

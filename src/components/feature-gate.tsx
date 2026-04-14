@@ -9,21 +9,22 @@ import Link from "next/link"
 
 interface FeatureGateProps {
     feature: string
+    boothId: string
     children: React.ReactNode
     fallback?: React.ReactNode
 }
 
-export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
+export function FeatureGate({ feature, boothId, children, fallback }: FeatureGateProps) {
     const { organization } = useOrganization()
     const [hasAccess, setHasAccess] = useState(false)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (!organization) return
+        if (!organization || !boothId) return
 
         const checkFeature = async () => {
             try {
-                const res = await fetch(`/api/features/check?orgId=${organization.id}&feature=${feature}`)
+                const res = await fetch(`/api/features/check?orgId=${organization.id}&boothId=${boothId}&feature=${feature}`)
                 const data = await res.json()
                 setHasAccess(data.hasAccess)
             } catch (error) {
@@ -35,7 +36,7 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
         }
 
         checkFeature()
-    }, [organization, feature])
+    }, [organization, boothId, feature])
 
     if (loading) {
         return <div className="animate-pulse bg-muted h-32 rounded-lg" />
@@ -48,20 +49,20 @@ export function FeatureGate({ feature, children, fallback }: FeatureGateProps) {
     return <>{children}</>
 }
 
-export function useFeatureAccess(feature: string) {
+export function useFeatureAccess(feature: string, boothId: string) {
     const { organization } = useOrganization()
     const [hasAccess, setHasAccess] = useState(false)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (!organization) {
+        if (!organization || !boothId) {
             setLoading(false)
             return
         }
 
         const checkFeature = async () => {
             try {
-                const res = await fetch(`/api/features/check?orgId=${organization.id}&feature=${feature}`)
+                const res = await fetch(`/api/features/check?orgId=${organization.id}&boothId=${boothId}&feature=${feature}`)
                 const data = await res.json()
                 setHasAccess(data.hasAccess)
             } catch (error) {

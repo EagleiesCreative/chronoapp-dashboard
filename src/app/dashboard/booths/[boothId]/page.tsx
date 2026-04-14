@@ -14,7 +14,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { IconGif, IconPrinter, IconFilter, IconSparkles, IconInfoCircle } from "@tabler/icons-react"
+import { IconGif, IconPrinter, IconFilter, IconSparkles, IconInfoCircle, IconVideo } from "@tabler/icons-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useFeatureAccess, featureDetails } from "@/components/feature-gate"
 import { FEATURES } from "@/lib/features"
@@ -29,8 +29,6 @@ interface Booth {
     status: string
     created_at: string
     booth_id: string
-    dslrbooth_api: string
-    dslrbooth_pass: string
     price: number
     booth_code: string
     assigned_to?: string
@@ -63,14 +61,13 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
     // Form state
     const [name, setName] = useState("")
     const [location, setLocation] = useState("")
-    const [dslrboothApi, setDslrboothApi] = useState("")
-    const [dslrboothPass, setDslrboothPass] = useState("")
     const [price, setPrice] = useState("")
     const [assignedTo, setAssignedTo] = useState("")
     const [appPin, setAppPin] = useState("")
     const [gifEnabled, setGifEnabled] = useState(false)
     const [printEnabled, setPrintEnabled] = useState(true)
     const [filterEnabled, setFilterEnabled] = useState(true)
+    const [liveVideoEnabled, setLiveVideoEnabled] = useState(false)
     const [boothType, setBoothType] = useState<'REGULAR_4R' | 'A3_NEWSPAPER'>('REGULAR_4R')
 
     const isAdmin = membership?.role === "org:admin"
@@ -96,14 +93,13 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                 setBooth(foundBooth)
                 setName(foundBooth.name)
                 setLocation(foundBooth.location)
-                setDslrboothApi(foundBooth.dslrbooth_api)
-                setDslrboothPass(foundBooth.dslrbooth_pass)
-                setPrice(foundBooth.price.toString())
+                setPrice((foundBooth.price || 0).toString())
                 setAssignedTo(foundBooth.assigned_to || "")
                 setAppPin(foundBooth.app_pin || "")
                 setGifEnabled(foundBooth.gif_enabled)
                 setPrintEnabled(foundBooth.print_enabled)
                 setFilterEnabled(foundBooth.filter_enabled)
+                setLiveVideoEnabled(foundBooth.live_video_enabled)
                 setBoothType(foundBooth.booth_type)
             } else {
                 toast.error("Booth not found")
@@ -159,14 +155,13 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                     boothId: booth.id,
                     name,
                     location,
-                    dslrbooth_api: dslrboothApi,
-                    dslrbooth_pass: dslrboothPass,
                     price: parseFloat(price),
                     assigned_to: assignedPayload,
                     app_pin: appPin || null,
                     gif_enabled: gifEnabled,
                     print_enabled: printEnabled,
                     filter_enabled: filterEnabled,
+                    live_video_enabled: liveVideoEnabled,
                     booth_type: boothType
                 })
             })
@@ -283,23 +278,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     />
                                 </div>
                                 <div className="flex flex-col gap-3">
-                                    <Label htmlFor="edit-dslrboothApi">DSLR Booth API</Label>
-                                    <Input
-                                        id="edit-dslrboothApi"
-                                        value={dslrboothApi}
-                                        onChange={(e) => setDslrboothApi(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-3">
-                                    <Label htmlFor="edit-dslrboothPass">DSLR Booth Password</Label>
-                                    <Input
-                                        id="edit-dslrboothPass"
-                                        type="password"
-                                        value={dslrboothPass}
-                                        onChange={(e) => setDslrboothPass(e.target.value)}
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-3">
                                     <Label htmlFor="edit-price">Price *</Label>
                                     <Input
                                         id="edit-price"
@@ -333,6 +311,7 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     title="GIF Mode"
                                     description="Allow users to record and save short GIFs"
                                     feature={FEATURES.GIF}
+                                    boothId={booth.id}
                                     checked={gifEnabled}
                                     onCheckedChange={setGifEnabled}
                                 />
@@ -344,6 +323,7 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     iconBg="bg-blue-500/10"
                                     title="Print Feature"
                                     description="Enable photo printing after session"
+                                    boothId={booth.id}
                                     checked={printEnabled}
                                     onCheckedChange={setPrintEnabled}
                                 />
@@ -356,8 +336,22 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     title="Filter Modes"
                                     description="Allow users to apply filters to their photos"
                                     feature={FEATURES.FILTERS}
+                                    boothId={booth.id}
                                     checked={filterEnabled}
                                     onCheckedChange={setFilterEnabled}
+                                />
+
+                                <Separator />
+
+                                <ActivationFeatureRow 
+                                    icon={<IconVideo className="h-5 w-5 text-rose-500" />}
+                                    iconBg="bg-rose-500/10"
+                                    title="Live Video"
+                                    description="Stream the photobooth gallery directly to an external screen"
+                                    feature={FEATURES.LIVE_VIDEO}
+                                    boothId={booth.id}
+                                    checked={liveVideoEnabled}
+                                    onCheckedChange={setLiveVideoEnabled}
                                 />
 
                                 <div className="flex justify-end pt-4">
@@ -449,12 +443,13 @@ interface ActivationFeatureRowProps {
     title: string
     description: string
     feature?: string
+    boothId: string
     checked: boolean
     onCheckedChange: (checked: boolean) => void
 }
 
-function ActivationFeatureRow({ icon, iconBg, title, description, feature, checked, onCheckedChange }: ActivationFeatureRowProps) {
-    const { hasAccess, loading } = feature ? useFeatureAccess(feature) : { hasAccess: true, loading: false }
+function ActivationFeatureRow({ icon, iconBg, title, description, feature, boothId, checked, onCheckedChange }: ActivationFeatureRowProps) {
+    const { hasAccess, loading } = feature ? useFeatureAccess(feature, boothId) : { hasAccess: true, loading: false }
     const details = feature ? featureDetails[feature] : null
 
     return (

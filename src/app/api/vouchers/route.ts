@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
         }
 
         // Check if organization has access to vouchers feature (Pro plan only)
-        const { hasFeature, FEATURES } = await import('@/lib/features')
-        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+        const { hasBoothFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasBoothFeature(boothId, orgId, FEATURES.VOUCHERS)
 
         if (!hasVouchers) {
             return NextResponse.json({
@@ -108,9 +108,23 @@ export async function PUT(req: NextRequest) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
         }
 
+        // Verify that the voucher belongs to a booth in the user's organization
+        const { data: voucherCheck, error: checkError } = await supabase
+            .from('vouchers')
+            .select('id, booth_id, booths!inner(organization_id)')
+            .eq('id', id)
+            .eq('booths.organization_id', orgId)
+            .single()
+
+        if (checkError || !voucherCheck) {
+            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
+        }
+
+        const boothId = voucherCheck.booth_id
+
         // Check vouchers feature access
-        const { hasFeature, FEATURES } = await import('@/lib/features')
-        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+        const { hasBoothFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasBoothFeature(boothId, orgId, FEATURES.VOUCHERS)
 
         if (!hasVouchers) {
             return NextResponse.json({
@@ -118,18 +132,6 @@ export async function PUT(req: NextRequest) {
                 message: "Vouchers are only available on the Pro plan.",
                 upgrade_required: true
             }, { status: 403 })
-        }
-
-        // Verify that the voucher belongs to a booth in the user's organization
-        const { data: voucherCheck, error: checkError } = await supabase
-            .from('vouchers')
-            .select('id, booths!inner(organization_id)')
-            .eq('id', id)
-            .eq('booths.organization_id', orgId)
-            .single()
-
-        if (checkError || !voucherCheck) {
-            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
         }
 
         const { data, error } = await supabase
@@ -173,9 +175,23 @@ export async function DELETE(req: NextRequest) {
             return NextResponse.json({ error: "Voucher ID and orgId required" }, { status: 400 })
         }
 
+        // Verify that the voucher belongs to a booth in the user's organization
+        const { data: voucherCheck, error: checkError } = await supabase
+            .from('vouchers')
+            .select('id, booth_id, booths!inner(organization_id)')
+            .eq('id', id)
+            .eq('booths.organization_id', orgId)
+            .single()
+
+        if (checkError || !voucherCheck) {
+            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
+        }
+
+        const boothId = voucherCheck.booth_id
+
         // Check vouchers feature access
-        const { hasFeature, FEATURES } = await import('@/lib/features')
-        const hasVouchers = await hasFeature(orgId, FEATURES.VOUCHERS)
+        const { hasBoothFeature, FEATURES } = await import('@/lib/features')
+        const hasVouchers = await hasBoothFeature(boothId, orgId, FEATURES.VOUCHERS)
 
         if (!hasVouchers) {
             return NextResponse.json({
@@ -183,18 +199,6 @@ export async function DELETE(req: NextRequest) {
                 message: "Vouchers are only available on the Pro plan.",
                 upgrade_required: true
             }, { status: 403 })
-        }
-
-        // Verify that the voucher belongs to a booth in the user's organization
-        const { data: voucherCheck, error: checkError } = await supabase
-            .from('vouchers')
-            .select('id, booths!inner(organization_id)')
-            .eq('id', id)
-            .eq('booths.organization_id', orgId)
-            .single()
-
-        if (checkError || !voucherCheck) {
-            return NextResponse.json({ error: "Voucher not found or access denied" }, { status: 404 })
         }
 
         const { error } = await supabase

@@ -242,9 +242,26 @@ export default function GalleryPage() {
 
                 <div className="flex items-center gap-2 pl-4 shrink-0">
                     {galleryData && currentPath.length === 0 && (
-                        <Badge variant="secondary" className="hidden sm:inline-flex">
-                            {galleryData.totalPhotos} photos
-                        </Badge>
+                        <div className="hidden sm:flex flex-col items-end gap-1 mr-4">
+                            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                                <span>Storage Used (Est.)</span>
+                                <span className={cn(
+                                    "font-semibold",
+                                    (galleryData.totalPhotos * 5 * 1024 * 1024) > 900 * 1024 * 1024 ? "text-destructive" : "text-foreground"
+                                )}>
+                                    {((galleryData.totalPhotos * 5 * 1024 * 1024) / (1024 * 1024 * 1024)).toFixed(2)} GB / 1.00 GB
+                                </span>
+                            </div>
+                            <div className="h-2 w-48 bg-muted rounded-full overflow-hidden relative border border-border/50">
+                                <div 
+                                    className={cn(
+                                        "absolute inset-y-0 left-0 transition-all duration-500",
+                                        (galleryData.totalPhotos * 5 * 1024 * 1024) > 900 * 1024 * 1024 ? "bg-destructive" : "bg-primary"
+                                    )}
+                                    style={{ width: `${Math.min(((galleryData.totalPhotos * 5 * 1024 * 1024) / (1024 * 1024 * 1024)) * 100, 100)}%` }}
+                                />
+                            </div>
+                        </div>
                     )}
                     <Button
                         variant="outline"

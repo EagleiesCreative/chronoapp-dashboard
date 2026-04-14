@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
-import { hasFeature } from '@/lib/features'
+import { hasBoothFeature } from '@/lib/features'
 
 export async function GET(req: NextRequest) {
     try {
@@ -11,13 +11,14 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url)
         const orgId = searchParams.get('orgId')
+        const boothId = searchParams.get('boothId')
         const feature = searchParams.get('feature')
 
-        if (!orgId || !feature) {
-            return NextResponse.json({ error: 'Missing orgId or feature' }, { status: 400 })
+        if (!orgId || !boothId || !feature) {
+            return NextResponse.json({ error: 'Missing orgId, boothId or feature' }, { status: 400 })
         }
 
-        const hasAccess = await hasFeature(orgId, feature as any)
+        const hasAccess = await hasBoothFeature(boothId, orgId, feature as any)
 
         return NextResponse.json({ hasAccess })
     } catch (error) {

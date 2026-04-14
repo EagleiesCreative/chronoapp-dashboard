@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { orgId, name, location, dslrbooth_api, dslrbooth_pass, price, booth_id, booth_code, assigned_to, gif_enabled, print_enabled, filter_enabled, booth_type } = body
+    const { orgId, name, location, price, booth_id, booth_code, assigned_to, gif_enabled, print_enabled, filter_enabled, live_video_enabled, booth_type } = body
 
     const { userId } = await auth()
     if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
@@ -139,14 +139,13 @@ export async function POST(req: NextRequest) {
       status: 'active',
       created_at: new Date().toISOString(),
       booth_id,
-      dslrbooth_api: dslrbooth_api || '',
-      dslrbooth_pass: dslrbooth_pass || '',
       price: parseFloat(price),
       booth_code: uniqueCode,
       assigned_to: assigned_to || null,
       gif_enabled: !!gif_enabled,
       print_enabled: print_enabled !== undefined ? !!print_enabled : true,
       filter_enabled: filter_enabled !== undefined ? !!filter_enabled : true,
+      live_video_enabled: !!live_video_enabled,
       booth_type: booth_type || 'REGULAR_4R'
     }]).select().single()
 
@@ -169,7 +168,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json()
-    const { orgId, boothId, name, location, dslrbooth_api, dslrbooth_pass, price, assigned_to, app_pin, gif_enabled, print_enabled, filter_enabled, booth_type } = body
+    const { orgId, boothId, name, location, price, assigned_to, app_pin, gif_enabled, print_enabled, filter_enabled, live_video_enabled, booth_type } = body
     console.log('Updating booth:', { orgId, boothId, name, location, price, assigned_to })
 
     const { userId } = await auth()
@@ -197,13 +196,12 @@ export async function PUT(req: NextRequest) {
     const updateData: Record<string, unknown> = {
       name,
       location,
-      dslrbooth_api: dslrbooth_api || '',
-      dslrbooth_pass: dslrbooth_pass || '',
       price: parseFloat(price),
       app_pin: app_pin || null,
       gif_enabled: gif_enabled !== undefined ? !!gif_enabled : undefined,
       print_enabled: print_enabled !== undefined ? !!print_enabled : undefined,
       filter_enabled: filter_enabled !== undefined ? !!filter_enabled : undefined,
+      live_video_enabled: live_video_enabled !== undefined ? !!live_video_enabled : undefined,
       booth_type: booth_type || undefined
     }
 

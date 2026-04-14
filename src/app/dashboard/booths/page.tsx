@@ -35,8 +35,6 @@ interface Booth {
   status: string
   created_at: string
   booth_id: string
-  dslrbooth_api: string
-  dslrbooth_pass: string
   price: number
   booth_code: string
   assigned_to?: string
@@ -91,8 +89,6 @@ export default function BoothsPage() {
   // Create form state
   const [name, setName] = useState("")
   const [location, setLocation] = useState("")
-  const [dslrboothApi, setDslrboothApi] = useState("")
-  const [dslrboothPass, setDslrboothPass] = useState("")
   const [price, setPrice] = useState("")
   const [assignedTo, setAssignedTo] = useState("")
 
@@ -167,8 +163,6 @@ export default function BoothsPage() {
   const resetForm = () => {
     setName("")
     setLocation("")
-    setDslrboothApi("")
-    setDslrboothPass("")
     setPrice("")
     setAssignedTo("")
   }
@@ -193,8 +187,6 @@ export default function BoothsPage() {
           orgId: organization?.id,
           name,
           location,
-          dslrbooth_api: dslrboothApi,
-          dslrbooth_pass: dslrboothPass,
           price: parseFloat(price),
           booth_id: generateBoothId(),
           booth_code: generateBoothCode(),
@@ -372,14 +364,6 @@ export default function BoothsPage() {
                   <div className="flex flex-col gap-3">
                     <Label htmlFor="location">Location *</Label>
                     <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="e.g. Hall A, Booth 12" />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <Label htmlFor="dslrboothApi">DSLR Booth API</Label>
-                    <Input id="dslrboothApi" value={dslrboothApi} onChange={(e) => setDslrboothApi(e.target.value)} placeholder="API endpoint" />
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <Label htmlFor="dslrboothPass">DSLR Booth Password</Label>
-                    <Input id="dslrboothPass" type="password" value={dslrboothPass} onChange={(e) => setDslrboothPass(e.target.value)} placeholder="Password" />
                   </div>
                   <div className="flex flex-col gap-3">
                     <Label htmlFor="price">Price *</Label>
