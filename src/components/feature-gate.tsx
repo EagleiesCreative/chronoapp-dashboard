@@ -1,6 +1,5 @@
 "use client"
 
-import { useOrganization } from "@clerk/nextjs"
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,16 +14,15 @@ interface FeatureGateProps {
 }
 
 export function FeatureGate({ feature, boothId, children, fallback }: FeatureGateProps) {
-    const { organization } = useOrganization()
     const [hasAccess, setHasAccess] = useState(false)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (!organization || !boothId) return
+        if (!boothId) return
 
         const checkFeature = async () => {
             try {
-                const res = await fetch(`/api/features/check?orgId=${organization.id}&boothId=${boothId}&feature=${feature}`)
+                const res = await fetch(`/api/features/check?boothId=${boothId}&feature=${feature}`)
                 const data = await res.json()
                 setHasAccess(data.hasAccess)
             } catch (error) {
@@ -36,7 +34,7 @@ export function FeatureGate({ feature, boothId, children, fallback }: FeatureGat
         }
 
         checkFeature()
-    }, [organization, boothId, feature])
+    }, [boothId, feature])
 
     if (loading) {
         return <div className="animate-pulse bg-muted h-32 rounded-lg" />
@@ -50,19 +48,18 @@ export function FeatureGate({ feature, boothId, children, fallback }: FeatureGat
 }
 
 export function useFeatureAccess(feature: string, boothId: string) {
-    const { organization } = useOrganization()
     const [hasAccess, setHasAccess] = useState(false)
     const [loading, setLoading] = useState(true)
 
     useEffect(() => {
-        if (!organization || !boothId) {
+        if (!boothId) {
             setLoading(false)
             return
         }
 
         const checkFeature = async () => {
             try {
-                const res = await fetch(`/api/features/check?orgId=${organization.id}&boothId=${boothId}&feature=${feature}`)
+                const res = await fetch(`/api/features/check?boothId=${boothId}&feature=${feature}`)
                 const data = await res.json()
                 setHasAccess(data.hasAccess)
             } catch (error) {
@@ -74,7 +71,7 @@ export function useFeatureAccess(feature: string, boothId: string) {
         }
 
         checkFeature()
-    }, [organization, feature])
+    }, [feature])
 
     return { hasAccess, loading }
 }

@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
+import { deduplicatePayments } from "@/lib/utils"
 
 interface SupabasePayment {
     id: string
@@ -75,7 +76,10 @@ export async function GET(req: NextRequest) {
         let paidCount = 0
         let totalRevenue = 0
 
-        const payments = (supabasePayments as SupabasePayment[]).map(payment => {
+        const rawPayments = (supabasePayments as SupabasePayment[]) || []
+        const uniquePayments = deduplicatePayments(rawPayments)
+
+        const payments = uniquePayments.map(payment => {
             const status = payment.status?.toUpperCase() || 'PENDING'
             const isPaid = status === 'PAID' || status === 'SETTLED'
 

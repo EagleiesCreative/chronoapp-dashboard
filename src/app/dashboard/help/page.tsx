@@ -57,7 +57,7 @@ const faqData = [
             },
             {
                 q: "What's the difference between Admin and Member roles?",
-                a: "Admins have full access: create/edit booths, manage members, approve withdrawals, and view all analytics. Members can only access assigned booths and their own revenue data."
+                a: "Admins have full access: create/edit booths, manage members, and view all analytics. Members can only access assigned booths and their own revenue data."
             },
             {
                 q: "How do I set revenue share percentages?",
@@ -66,17 +66,9 @@ const faqData = [
         ]
     },
     {
-        category: "Payments & Withdrawals",
+        category: "Payments",
         icon: IconCash,
         questions: [
-            {
-                q: "How do members withdraw their earnings?",
-                a: "Members go to Settings → Add bank account details → Navigate to Payments → Click 'Withdraw Funds' → Enter amount → Submit. Admins must approve the withdrawal before processing."
-            },
-            {
-                q: "How do I approve withdrawal requests?",
-                a: "Go to Payments → Pending Approvals tab → Review withdrawal requests → Click 'Approve' or 'Reject'. Approved withdrawals are processed via Xendit automatically."
-            },
             {
                 q: "Where can I see transaction history?",
                 a: "Navigate to Analytics or Payments page to view all transactions. You can filter by date range, booth, or payment status. Export data using the Reports feature."

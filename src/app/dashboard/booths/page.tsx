@@ -37,14 +37,6 @@ interface Booth {
   booth_id: string
   price: number
   booth_code: string
-  assigned_to?: string
-}
-
-interface Member {
-  id: string
-  name: string
-  email: string
-  role: string
 }
 
 function generateBoothId(): string {
@@ -74,9 +66,7 @@ export default function BoothsPage() {
   const { isLoaded: orgLoaded, organization, membership } = useOrganization()
   const { isLoaded: userLoaded, user } = useUser()
   const [booths, setBooths] = useState<Booth[]>([])
-  const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
-  const [loadingMembers, setLoadingMembers] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -90,7 +80,6 @@ export default function BoothsPage() {
   const [name, setName] = useState("")
   const [location, setLocation] = useState("")
   const [price, setPrice] = useState("")
-  const [assignedTo, setAssignedTo] = useState("")
 
   // Pagination state
   const LIMIT = 10
@@ -98,12 +87,6 @@ export default function BoothsPage() {
   const [total, setTotal] = useState(0)
 
   const isAdmin = membership?.role === "org:admin"
-
-  const getMemberName = (userId: string | undefined): string => {
-    if (!userId || userId === "__unassigned") return "Unassigned"
-    const member = members.find(m => m.id === userId)
-    return member ? member.name : "Unknown"
-  }
 
   const fetchBooths = async (opts?: { limit?: number; offset?: number }) => {
     try {
@@ -123,26 +106,10 @@ export default function BoothsPage() {
     }
   }
 
-  const fetchMembers = async () => {
-    try {
-      setLoadingMembers(true)
-      const res = await fetch(`/api/orgs/members?orgId=${organization?.id}`)
-      if (!res.ok) throw new Error('Failed to fetch members')
-      const data = await res.json()
-      setMembers(data.members || [])
-    } catch (error) {
-      console.error('Error fetching members:', error)
-      toast.error('Failed to load members')
-    } finally {
-      setLoadingMembers(false)
-    }
-  }
-
   useEffect(() => {
     if (orgLoaded && userLoaded && organization && user) {
       setOffset(0)
       fetchBooths({ limit: LIMIT, offset: 0 })
-      fetchMembers()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgLoaded, userLoaded, organization, user])
@@ -164,17 +131,11 @@ export default function BoothsPage() {
     setName("")
     setLocation("")
     setPrice("")
-    setAssignedTo("")
   }
 
   const handleCreate = async () => {
     if (!name.trim() || !location.trim() || !price) {
       toast.error("Please fill in all required fields")
-      return
-    }
-
-    if (!assignedTo) {
-      toast.error("Please select an assignee")
       return
     }
 
@@ -189,8 +150,7 @@ export default function BoothsPage() {
           location,
           price: parseFloat(price),
           booth_id: generateBoothId(),
-          booth_code: generateBoothCode(),
-          assigned_to: assignedTo
+          booth_code: generateBoothCode()
         })
       })
 
@@ -310,8 +270,6 @@ export default function BoothsPage() {
     )
   }
 
-  const assignableMembers = members.filter(m => m.role !== 'org:admin')
-
   return (
     <div className="flex flex-col gap-6 p-4">
       <div className="flex items-center justify-between">
@@ -336,27 +294,6 @@ export default function BoothsPage() {
                   <DialogDescription>Fill in the booth details below.</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
-                  <div className="flex flex-col gap-3">
-                    <Label htmlFor="assignee">Assign to Member *</Label>
-                    <Select value={assignedTo} onValueChange={setAssignedTo}>
-                      <SelectTrigger id="assignee">
-                        <SelectValue placeholder="Select a member" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {loadingMembers ? (
-                          <div className="p-2 text-sm text-muted-foreground">Loading members...</div>
-                        ) : assignableMembers.length === 0 ? (
-                          <div className="p-2 text-sm text-muted-foreground">No members available</div>
-                        ) : (
-                          assignableMembers.map((member) => (
-                            <SelectItem key={member.id} value={member.id}>
-                              {member.name} ({member.email})
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="flex flex-col gap-3">
                     <Label htmlFor="name">Booth Name *</Label>
                     <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Main Booth" />
@@ -470,20 +407,10 @@ export default function BoothsPage() {
 
                   <div className="rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
-                      <IconUser className="h-4 w-4 text-purple-500" />
-                      Assigned To
-                    </div>
-                    <div className="text-sm font-semibold truncate" title={getMemberName(selectedBooth.assigned_to)}>
-                      {getMemberName(selectedBooth.assigned_to)}
-                    </div>
-                  </div>
-
-                  <div className="rounded-lg border bg-card p-3 shadow-sm hover:shadow-md transition-shadow">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
                       <IconCurrencyDollar className="h-4 w-4 text-emerald-500" />
                       Cost Limit / Price
                     </div>
-                    <div className="text-sm font-semibold">
+                    <div className="text-sm font-semibold text-foreground">
                       {new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(selectedBooth.price)}
                     </div>
                   </div>

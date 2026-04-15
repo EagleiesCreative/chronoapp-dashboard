@@ -385,3 +385,40 @@ export async function validateBankAccount(data: BankValidationRequest): Promise<
         return null;
     }
 }
+
+// ========================================
+// BALANCE API
+// ========================================
+
+export interface XenditBalance {
+    balance: number
+}
+
+/**
+ * Fetch the current account balance directly from Xendit.
+ * @param accountType 'CASH' (default) | 'HOLDING'
+ * @param currency e.g. 'IDR' (default)
+ */
+export async function getAccountBalance(
+    accountType: 'CASH' | 'HOLDING' = 'CASH',
+    currency: string = 'IDR'
+): Promise<XenditBalance> {
+    const secretKey = process.env.XENDIT_API_KEY
+    if (!secretKey) throw new Error('XENDIT_API_KEY is not set')
+
+    const params = new URLSearchParams({ account_type: accountType, currency })
+    const response = await fetch(`https://api.xendit.co/balance?${params.toString()}`, {
+        method: 'GET',
+        headers: {
+            'Authorization': `Basic ${Buffer.from(secretKey + ':').toString('base64')}`,
+        },
+        cache: 'no-store', // Always get live balance, never cached
+    })
+
+    if (!response.ok) {
+        const errorBody = await response.text()
+        throw new Error(`Xendit Balance API error: ${response.status} ${errorBody}`)
+    }
+
+    return response.json()
+}

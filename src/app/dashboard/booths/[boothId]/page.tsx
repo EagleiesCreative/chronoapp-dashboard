@@ -31,19 +31,11 @@ interface Booth {
     booth_id: string
     price: number
     booth_code: string
-    assigned_to?: string
     app_pin?: string
     gif_enabled: boolean
     print_enabled: boolean
     filter_enabled: boolean
     booth_type: 'REGULAR_4R' | 'A3_NEWSPAPER'
-}
-
-interface Member {
-    id: string
-    name: string
-    email: string
-    role: string
 }
 
 export default function EditBoothPage({ params }: { params: Promise<{ boothId: string }> }) {
@@ -53,16 +45,13 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
     const router = useRouter()
 
     const [booth, setBooth] = useState<Booth | null>(null)
-    const [members, setMembers] = useState<Member[]>([])
     const [loading, setLoading] = useState(true)
-    const [loadingMembers, setLoadingMembers] = useState(false)
     const [saving, setSaving] = useState(false)
 
     // Form state
     const [name, setName] = useState("")
     const [location, setLocation] = useState("")
     const [price, setPrice] = useState("")
-    const [assignedTo, setAssignedTo] = useState("")
     const [appPin, setAppPin] = useState("")
     const [gifEnabled, setGifEnabled] = useState(false)
     const [printEnabled, setPrintEnabled] = useState(true)
@@ -94,7 +83,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                 setName(foundBooth.name)
                 setLocation(foundBooth.location)
                 setPrice((foundBooth.price || 0).toString())
-                setAssignedTo(foundBooth.assigned_to || "")
                 setAppPin(foundBooth.app_pin || "")
                 setGifEnabled(foundBooth.gif_enabled)
                 setPrintEnabled(foundBooth.print_enabled)
@@ -113,25 +101,9 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
         }
     }
 
-    const fetchMembers = async () => {
-        try {
-            setLoadingMembers(true)
-            const res = await fetch(`/api/orgs/members?orgId=${organization?.id}`)
-            if (!res.ok) throw new Error('Failed to fetch members')
-            const data = await res.json()
-            setMembers(data.members || [])
-        } catch (error) {
-            console.error('Error fetching members:', error)
-            toast.error('Failed to load members')
-        } finally {
-            setLoadingMembers(false)
-        }
-    }
-
     useEffect(() => {
         if (orgLoaded && userLoaded && organization && user) {
             fetchBooth()
-            fetchMembers()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [orgLoaded, userLoaded, organization, user])
@@ -145,8 +117,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
 
         setSaving(true)
         try {
-            const assignedPayload = assignedTo === "__unassigned" ? null : (assignedTo || null)
-
             const res = await fetch('/api/booths', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -156,7 +126,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                     name,
                     location,
                     price: parseFloat(price),
-                    assigned_to: assignedPayload,
                     app_pin: appPin || null,
                     gif_enabled: gifEnabled,
                     print_enabled: printEnabled,
@@ -238,28 +207,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
                                     <p className="text-xs text-muted-foreground">
                                         Note: Changing the booth type will affect features and layout on the standalone app.
                                     </p>
-                                </div>
-                                <div className="flex flex-col gap-3">
-                                    <Label htmlFor="edit-assignee">Assign to Member</Label>
-                                    <Select value={assignedTo} onValueChange={setAssignedTo} disabled={!isAdmin}>
-                                        <SelectTrigger id="edit-assignee">
-                                            <SelectValue placeholder="Select a member" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="__unassigned">Unassigned</SelectItem>
-                                            {loadingMembers ? (
-                                                <div className="p-2 text-sm text-muted-foreground">Loading members...</div>
-                                            ) : assignableMembers.length === 0 ? (
-                                                <div className="p-2 text-sm text-muted-foreground">No members available</div>
-                                            ) : (
-                                                assignableMembers.map((member) => (
-                                                    <SelectItem key={member.id} value={member.id}>
-                                                        {member.name} ({member.email})
-                                                    </SelectItem>
-                                                ))
-                                            )}
-                                        </SelectContent>
-                                    </Select>
                                 </div>
                                 <div className="flex flex-col gap-3">
                                     <Label htmlFor="edit-name">Booth Name *</Label>

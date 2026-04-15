@@ -57,17 +57,13 @@ export async function GET(req: NextRequest) {
     const from = offset
     const to = offset + limit - 1
 
+    // All members of the organization see all booths
     let query = supabase
       .from('booths')
       .select('*', { count: 'exact' })
       .eq('organization_id', orgId)
       .order('created_at', { ascending: false })
       .range(from, to)
-
-    // If user is not an admin, only show assigned booths
-    if (orgRole !== 'org:admin') {
-      query = query.eq('assigned_to', userId)
-    }
 
     const { data, error, count } = await query
 

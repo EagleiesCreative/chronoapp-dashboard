@@ -1,13 +1,30 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { 
-    Upload, 
-    Plus, 
-    Trash2, 
-    Save, 
-    Maximize2, 
-    Layers, 
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent
+} from '@dnd-kit/core'
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import {
+    Upload,
+    Plus,
+    Trash2,
+    Save,
+    Maximize2,
+    Layers,
     Settings2,
     Loader2
 } from "lucide-react"
@@ -17,16 +34,17 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent } from "@/components/ui/card"
-import { 
-    Select, 
-    SelectContent, 
-    SelectItem, 
-    SelectTrigger, 
-    SelectValue 
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue
 } from "@/components/ui/select"
 import { toast } from "sonner"
 import { motion, AnimatePresence } from "framer-motion"
 import Image from "next/image"
+import { cn } from "@/lib/utils"
 
 interface PhotoSlot {
     id: string
@@ -86,6 +104,28 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
     const [isUploading, setIsUploading] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const canvasContainerRef = useRef<HTMLDivElement>(null)
+
+    const sensors = useSensors(
+        useSensor(PointerSensor),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    )
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event
+        if (over && active.id !== over.id) {
+            setFrame((prev) => {
+                const oldIndex = prev.photo_slots.findIndex((slot) => slot.id === active.id)
+                const newIndex = prev.photo_slots.findIndex((slot) => slot.id === over.id)
+                return {
+                    ...prev,
+                    photo_slots: arrayMove(prev.photo_slots, oldIndex, newIndex),
+                }
+            })
+        }
+    }
 
     // Fetch booths on mount
     useEffect(() => {
@@ -136,7 +176,7 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
         setIsUploading(true)
         const formData = new FormData()
         formData.append('file', file)
-        
+
         // Metadata for frame creation
         const metadata = {
             name: frame.name || file.name.split('.')[0],
@@ -189,7 +229,7 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
     const updateSlot = (id: string, updates: Partial<PhotoSlot>) => {
         setFrame(prev => ({
             ...prev,
-            photo_slots: prev.photo_slots.map(slot => 
+            photo_slots: prev.photo_slots.map(slot =>
                 slot.id === id ? { ...slot, ...updates } : slot
             )
         }))
@@ -208,7 +248,7 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
         try {
             const url = frame.id ? `/api/frames/${frame.id}` : '/api/frames'
             const method = frame.id ? 'PATCH' : 'POST'
-            
+
             // For saving existing without file upload, we use standard JSON
             // But if it's new without file, the API will fail anyway (image_url required)
             const res = await fetch(url, {
@@ -224,7 +264,7 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                     booth_session_id: frame.booth_session_id === 'none' ? null : frame.booth_session_id
                 })
             })
-            
+
             if (res.ok) {
                 toast.success("Frame saved successfully!")
                 onSaveSuccess?.()
@@ -249,32 +289,36 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                 <Card className="bg-card/50 border-border/50 overflow-hidden relative group">
                     <div className="p-8 flex items-center justify-center bg-black/40 min-h-[600px] relative">
                         {frame.image_url ? (
-                            <div 
+                            <div
+                                ref={canvasContainerRef}
                                 className="relative shadow-2xl transition-all duration-500"
-                                style={{ 
-                                    width: '100%', 
-                                    maxWidth: '500px', 
+                                style={{
+                                    width: '100%',
+                                    maxWidth: '500px',
                                     aspectRatio: `${frame.canvas_width}/${frame.canvas_height}`,
-                                    backgroundColor: '#111' 
+                                    backgroundColor: '#111'
                                 }}
                             >
                                 {/* Photo Slots Layer (Below) */}
-                                {frame.photo_slots.filter(s => s.layer === 'below').map(slot => (
-                                    <SlotPreview 
-                                        key={slot.id} 
-                                        slot={slot} 
+                                {frame.photo_slots.filter(s => s.layer === 'below').map((slot, index) => (
+                                    <SlotPreview
+                                        key={slot.id}
+                                        slot={slot}
+                                        index={frame.photo_slots.findIndex(s => s.id === slot.id)} // Original index in array
                                         isSelected={selectedSlotId === slot.id}
                                         onClick={() => setSelectedSlotId(slot.id)}
+                                        onUpdate={(id, updates) => updateSlot(id, updates)}
                                         canvasWidth={frame.canvas_width}
                                         canvasHeight={frame.canvas_height}
+                                        containerRef={canvasContainerRef}
                                     />
                                 ))}
 
                                 {/* Frame Image */}
                                 <div className="absolute inset-0 z-10 pointer-events-none">
-                                    <Image 
-                                        src={frame.image_url} 
-                                        alt="Frame Design" 
+                                    <Image
+                                        src={frame.image_url}
+                                        alt="Frame Design"
                                         fill
                                         className="object-contain"
                                         unoptimized // Since it's a dynamic preview and we need pixel perfection
@@ -282,14 +326,17 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 </div>
 
                                 {/* Photo Slots Layer (Above) */}
-                                {frame.photo_slots.filter(s => s.layer === 'above').map(slot => (
-                                    <SlotPreview 
-                                        key={slot.id} 
-                                        slot={slot} 
+                                {frame.photo_slots.filter(s => s.layer === 'above').map((slot, index) => (
+                                    <SlotPreview
+                                        key={slot.id}
+                                        slot={slot}
+                                        index={frame.photo_slots.findIndex(s => s.id === slot.id)} // Original index in array
                                         isSelected={selectedSlotId === slot.id}
                                         onClick={() => setSelectedSlotId(slot.id)}
+                                        onUpdate={(id, updates) => updateSlot(id, updates)}
                                         canvasWidth={frame.canvas_width}
                                         canvasHeight={frame.canvas_height}
+                                        containerRef={canvasContainerRef}
                                     />
                                 ))}
                             </div>
@@ -302,13 +349,13 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 </Button>
                             </div>
                         )}
-                        
-                        <input 
-                            type="file" 
-                            ref={fileInputRef} 
-                            onChange={handleImageUpload} 
-                            accept="image/*" 
-                            className="hidden" 
+
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageUpload}
+                            accept="image/*"
+                            className="hidden"
                         />
                     </div>
                 </Card>
@@ -333,24 +380,24 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                             <CardContent className="p-6 space-y-4">
                                 <div className="space-y-2">
                                     <Label>Frame Name</Label>
-                                    <Input 
-                                        value={frame.name} 
+                                    <Input
+                                        value={frame.name}
                                         onChange={e => setFrame(prev => ({ ...prev, name: e.target.value }))}
                                         placeholder="E.g. Summer Wedding 4x6"
                                         className="bg-background/50"
                                     />
                                 </div>
-                                
+
                                 <div className="space-y-2">
                                     <Label>Canvas Preset</Label>
-                                    <Select 
+                                    <Select
                                         onValueChange={(val) => {
                                             const preset = CANVAS_PRESETS.find(p => p.id === val);
                                             if (preset && preset.id !== "custom") {
-                                                setFrame(prev => ({ 
-                                                    ...prev, 
-                                                    canvas_width: preset.width, 
-                                                    canvas_height: preset.height 
+                                                setFrame(prev => ({
+                                                    ...prev,
+                                                    canvas_width: preset.width,
+                                                    canvas_height: preset.height
                                                 }));
                                             }
                                         }}
@@ -370,18 +417,18 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <Label>Width (px)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={frame.canvas_width} 
+                                        <Input
+                                            type="number"
+                                            value={frame.canvas_width}
                                             onChange={e => setFrame(prev => ({ ...prev, canvas_width: parseInt(e.target.value) || 0 }))}
                                             className="bg-background/50"
                                         />
                                     </div>
                                     <div className="space-y-2">
                                         <Label>Height (px)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={frame.canvas_height} 
+                                        <Input
+                                            type="number"
+                                            value={frame.canvas_height}
                                             onChange={e => setFrame(prev => ({ ...prev, canvas_height: parseInt(e.target.value) || 0 }))}
                                             className="bg-background/50"
                                         />
@@ -389,9 +436,9 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Price (IDR)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={frame.price} 
+                                    <Input
+                                        type="number"
+                                        value={frame.price}
                                         onChange={e => setFrame(prev => ({ ...prev, price: parseInt(e.target.value) || 0 }))}
                                         className="bg-background/50"
                                     />
@@ -400,8 +447,8 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 <div className="space-y-4 pt-2 border-t border-border/50">
                                     <div className="space-y-2">
                                         <Label>Assigned Booth</Label>
-                                        <Select 
-                                            value={frame.booth_id || 'none'} 
+                                        <Select
+                                            value={frame.booth_id || 'none'}
                                             onValueChange={(val) => setFrame(prev => ({ ...prev, booth_id: val, booth_session_id: null }))}
                                             disabled={isLoadingBooths}
                                         >
@@ -421,17 +468,17 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
 
                                     <div className="space-y-2">
                                         <Label>Assigned Session</Label>
-                                        <Select 
-                                            value={frame.booth_session_id || 'none'} 
+                                        <Select
+                                            value={frame.booth_session_id || 'none'}
                                             onValueChange={(val) => setFrame(prev => ({ ...prev, booth_session_id: val }))}
                                             disabled={!frame.booth_id || frame.booth_id === 'none' || isLoadingSessions}
                                         >
                                             <SelectTrigger className="bg-background/50 border-border/50">
                                                 <SelectValue placeholder={
-                                                    !frame.booth_id || frame.booth_id === 'none' 
-                                                        ? "Select a booth first" 
-                                                        : isLoadingSessions 
-                                                            ? "Loading sessions..." 
+                                                    !frame.booth_id || frame.booth_id === 'none'
+                                                        ? "Select a booth first"
+                                                        : isLoadingSessions
+                                                            ? "Loading sessions..."
                                                             : "Select a session..."
                                                 } />
                                             </SelectTrigger>
@@ -446,8 +493,8 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                         </Select>
                                     </div>
                                 </div>
-                                <Button 
-                                    className="w-full mt-2 bg-primary/10 text-primary hover:bg-primary/20" 
+                                <Button
+                                    className="w-full mt-2 bg-primary/10 text-primary hover:bg-primary/20"
                                     variant="outline"
                                     onClick={() => fileInputRef.current?.click()}
                                     disabled={isUploading}
@@ -466,49 +513,31 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                         </Button>
 
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-                            {frame.photo_slots.map((slot, index) => (
-                                <motion.div 
-                                    key={slot.id}
-                                    initial={{ opacity: 0, x: -20 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: index * 0.05 }}
+                            <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                            >
+                                <SortableContext
+                                    items={frame.photo_slots.map(s => s.id)}
+                                    strategy={verticalListSortingStrategy}
                                 >
-                                    <Card 
-                                        className={cn(
-                                            "bg-card/20 border-border/50 cursor-pointer hover:border-primary/30 transition-colors",
-                                            selectedSlotId === slot.id && "border-primary bg-primary/5"
-                                        )}
-                                        onClick={() => setSelectedSlotId(slot.id)}
-                                    >
-                                        <CardContent className="p-3 flex items-center justify-between">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center text-[10px] font-bold">
-                                                    #{index + 1}
-                                                </div>
-                                                <div className="text-xs">
-                                                    <div className="font-medium">Layer {index + 1}</div>
-                                                    <div className="text-muted-foreground">Capture {slot.capture_index + 1} • {slot.width}x{slot.height}px</div>
-                                                </div>
-                                            </div>
-                                            <Button 
-                                                variant="ghost" 
-                                                size="icon" 
-                                                className="h-8 w-8 text-destructive/50 hover:text-destructive hover:bg-destructive/10"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    removeSlot(slot.id);
-                                                }}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        </CardContent>
-                                    </Card>
-                                </motion.div>
-                            ))}
+                                    {frame.photo_slots.map((slot, index) => (
+                                        <SortableLayerItem
+                                            key={slot.id}
+                                            slot={slot}
+                                            index={index}
+                                            isSelected={selectedSlotId === slot.id}
+                                            onSelect={() => setSelectedSlotId(slot.id)}
+                                            onRemove={() => removeSlot(slot.id)}
+                                        />
+                                    ))}
+                                </SortableContext>
+                            </DndContext>
                         </div>
 
                         {selectedSlot && (
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 className="pt-4 space-y-6"
@@ -516,8 +545,8 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                 <div className="flex items-center justify-between">
                                     <h4 className="text-sm font-bold uppercase tracking-wider text-primary">Layer Configuration</h4>
                                     <div className="flex gap-2">
-                                        <Select 
-                                            value={String(selectedSlot.capture_index)} 
+                                        <Select
+                                            value={String(selectedSlot.capture_index)}
                                             onValueChange={(val) => updateSlot(selectedSlot.id, { capture_index: parseInt(val) })}
                                         >
                                             <SelectTrigger className="h-7 w-[110px] text-[10px] bg-background/50 border-border/50">
@@ -531,9 +560,9 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                                 ))}
                                             </SelectContent>
                                         </Select>
-                                        <Button 
-                                            variant="outline" 
-                                            size="sm" 
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
                                             className="h-7 text-[10px]"
                                             onClick={() => updateSlot(selectedSlot.id, { layer: selectedSlot.layer === 'above' ? 'below' : 'above' })}
                                         >
@@ -549,10 +578,10 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                             <Label>Horizontal Position (X)</Label>
                                             <span className="text-muted-foreground font-mono">{selectedSlot.x}px</span>
                                         </div>
-                                        <Slider 
-                                            value={[selectedSlot.x]} 
-                                            min={0} 
-                                            max={frame.canvas_width} 
+                                        <Slider
+                                            value={[selectedSlot.x]}
+                                            min={0}
+                                            max={frame.canvas_width}
                                             step={1}
                                             onValueChange={([val]) => updateSlot(selectedSlot.id, { x: val })}
                                         />
@@ -562,10 +591,10 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                             <Label>Vertical Position (Y)</Label>
                                             <span className="text-muted-foreground font-mono">{selectedSlot.y}px</span>
                                         </div>
-                                        <Slider 
-                                            value={[selectedSlot.y]} 
-                                            min={0} 
-                                            max={frame.canvas_height} 
+                                        <Slider
+                                            value={[selectedSlot.y]}
+                                            min={0}
+                                            max={frame.canvas_height}
                                             step={1}
                                             onValueChange={([val]) => updateSlot(selectedSlot.id, { y: val })}
                                         />
@@ -575,10 +604,10 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                             <Label>Width</Label>
                                             <span className="text-muted-foreground font-mono">{selectedSlot.width}px</span>
                                         </div>
-                                        <Slider 
-                                            value={[selectedSlot.width]} 
-                                            min={10} 
-                                            max={frame.canvas_width} 
+                                        <Slider
+                                            value={[selectedSlot.width]}
+                                            min={10}
+                                            max={frame.canvas_width}
                                             step={1}
                                             onValueChange={([val]) => updateSlot(selectedSlot.id, { width: val })}
                                         />
@@ -588,10 +617,10 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                             <Label>Height</Label>
                                             <span className="text-muted-foreground font-mono">{selectedSlot.height}px</span>
                                         </div>
-                                        <Slider 
-                                            value={[selectedSlot.height]} 
-                                            min={10} 
-                                            max={frame.canvas_height} 
+                                        <Slider
+                                            value={[selectedSlot.height]}
+                                            min={10}
+                                            max={frame.canvas_height}
                                             step={1}
                                             onValueChange={([val]) => updateSlot(selectedSlot.id, { height: val })}
                                         />
@@ -601,10 +630,10 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                                             <Label>Rotation</Label>
                                             <span className="text-muted-foreground font-mono">{selectedSlot.rotation}°</span>
                                         </div>
-                                        <Slider 
-                                            value={[selectedSlot.rotation]} 
-                                            min={0} 
-                                            max={360} 
+                                        <Slider
+                                            value={[selectedSlot.rotation]}
+                                            min={0}
+                                            max={360}
                                             step={1}
                                             onValueChange={([val]) => updateSlot(selectedSlot.id, { rotation: val })}
                                         />
@@ -616,7 +645,7 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
                 </Tabs>
 
                 <div className="pt-4 flex gap-3">
-                    <Button 
+                    <Button
                         className="flex-1 bg-primary-500 hover:bg-primary-600 text-gray-950 font-bold"
                         onClick={handleSave}
                         disabled={isSaving || !frame.image_url}
@@ -636,57 +665,208 @@ export function FrameBuilder({ initialData, orgId, onSaveSuccess }: FrameBuilder
 
 interface SlotPreviewProps {
     slot: PhotoSlot
+    index: number
     isSelected: boolean
     onClick: () => void
+    onUpdate: (id: string, updates: Partial<PhotoSlot>) => void
     canvasWidth: number
     canvasHeight: number
+    containerRef: React.RefObject<HTMLDivElement | null>
 }
 
-function SlotPreview({ slot, isSelected, onClick, canvasWidth, canvasHeight }: SlotPreviewProps) {
+interface SortableLayerItemProps {
+    slot: PhotoSlot
+    index: number
+    isSelected: boolean
+    onSelect: () => void
+    onRemove: () => void
+}
+
+function SortableLayerItem({ slot, index, isSelected, onSelect, onRemove }: SortableLayerItemProps) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: slot.id })
+
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : undefined,
+    }
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            className={cn("touch-none", isDragging && "opacity-50")}
+        >
+            <Card
+                className={cn(
+                    "bg-card/20 border-border/50 cursor-pointer hover:border-primary/30 transition-colors",
+                    isSelected && "border-primary bg-primary/5 shadow-[0_0_15px_rgba(0,221,99,0.1)]"
+                )}
+                onClick={onSelect}
+                {...attributes}
+                {...listeners}
+            >
+                <CardContent className="p-3 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            "w-8 h-8 rounded flex items-center justify-center text-[10px] font-bold transition-colors",
+                            isSelected ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"
+                        )}>
+                            #{index + 1}
+                        </div>
+                        <div className="text-xs">
+                            <div className="font-medium">Layer {index + 1}</div>
+                            <div className="text-muted-foreground">Capture {slot.capture_index + 1} • {slot.width}x{slot.height}px</div>
+                        </div>
+                    </div>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive/50 hover:text-destructive hover:bg-destructive/10"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onRemove();
+                        }}
+                        onPointerDown={e => e.stopPropagation()} // Prevent drag when clicking delete
+                    >
+                        <Trash2 className="w-4 h-4" />
+                    </Button>
+                </CardContent>
+            </Card>
+        </div>
+    )
+}
+
+function SlotPreview({ slot, index, isSelected, onClick, onUpdate, canvasWidth, canvasHeight, containerRef }: SlotPreviewProps) {
     const xPct = (slot.x / canvasWidth) * 100
     const yPct = (slot.y / canvasHeight) * 100
     const wPct = (slot.width / canvasWidth) * 100
     const hPct = (slot.height / canvasHeight) * 100
+    const isResizingRef = useRef(false)
+
+    const getScale = () => {
+        if (!containerRef.current) return 1
+        return canvasWidth / containerRef.current.offsetWidth
+    }
+
+    // Parent pan handler — moves the slot, but only if not resizing
+    const handlePan = (_: any, info: any) => {
+        if (isResizingRef.current) return
+        if (!isSelected) return
+        const scale = getScale()
+        onUpdate(slot.id, {
+            x: Math.round(slot.x + info.delta.x * scale),
+            y: Math.round(slot.y + info.delta.y * scale)
+        })
+    }
+
+    // Resize handler — only changes width/height (and x/y for left/top edges)
+    const handleResize = (direction: string, _: any, info: any) => {
+        const scale = getScale()
+        const dx = info.delta.x * scale
+        const dy = info.delta.y * scale
+
+        let newX = slot.x
+        let newY = slot.y
+        let newWidth = slot.width
+        let newHeight = slot.height
+
+        if (direction.includes('right')) {
+            newWidth += dx
+        }
+        if (direction.includes('left')) {
+            const clampedDX = Math.min(dx, slot.width - 100) // only shift as much as size actually changes
+            newX += clampedDX
+            newWidth -= clampedDX
+        }
+        if (direction.includes('bottom')) {
+            newHeight += dy
+        }
+        if (direction.includes('top')) {
+            const clampedDY = Math.min(dy, slot.height - 100) // only shift as much as size actually changes
+            newY += clampedDY
+            newHeight -= clampedDY
+        }
+
+        newWidth = Math.max(100, newWidth)
+        newHeight = Math.max(100, newHeight)
+
+        onUpdate(slot.id, {
+            width: Math.round(newWidth),
+            height: Math.round(newHeight),
+            x: Math.round(newX),
+            y: Math.round(newY)
+        })
+    }
 
     return (
         <motion.div
             initial={false}
-            animate={{
+            onPan={handlePan}
+            style={{
                 left: `${xPct}%`,
                 top: `${yPct}%`,
                 width: `${wPct}%`,
                 height: `${hPct}%`,
-                rotate: slot.rotation
+                transform: `rotate(${slot.rotation}deg)`
             }}
             onClick={(e) => {
                 e.stopPropagation()
                 onClick()
             }}
             className={cn(
-                "absolute cursor-pointer flex items-center justify-center overflow-hidden transition-shadow duration-300",
-                isSelected ? "border-2 border-primary ring-2 ring-primary/20 z-30 shadow-[0_0_15px_rgba(0,221,99,0.3)]" : "border border-white/20 z-20 hover:border-white/40 shadow-xl",
+                "absolute flex items-center justify-center overflow-visible transition-shadow duration-300",
+                isSelected ? "cursor-grab active:cursor-grabbing border-2 border-primary ring-2 ring-primary/20 z-30 shadow-[0_0_15px_rgba(0,221,99,0.3)]" : "cursor-pointer border border-white/20 z-20 hover:border-white/40 shadow-xl",
                 slot.layer === 'below' ? 'bg-muted/40' : 'bg-primary/20 backdrop-blur-[2px] border-dashed'
             )}
         >
-            <div className="opacity-40 flex flex-col items-center">
+            <div className="opacity-40 flex flex-col items-center pointer-events-none">
                 <Maximize2 className="w-4 h-4" />
-                <span className="text-[8px] font-bold mt-1">CAPTURE {slot.capture_index + 1}</span>
+                <span className="text-[8px] font-bold mt-1 text-center font-mono">
+                    L{index + 1}<br />
+                    C{slot.capture_index + 1}
+                </span>
             </div>
-            
+
             <AnimatePresence>
                 {isSelected && (
-                    <motion.div 
-                        initial={{ opacity: 0 }} 
-                        animate={{ opacity: 1 }} 
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 border-2 border-primary animate-pulse" 
-                    />
+                    <>
+                        {/* Resize Handles */}
+                        {['top-left', 'top-right', 'bottom-left', 'bottom-right', 'top', 'bottom', 'left', 'right'].map((dir) => (
+                            <motion.div
+                                key={dir}
+                                onPanStart={() => { isResizingRef.current = true }}
+                                onPan={(e, info) => handleResize(dir, e, info)}
+                                onPanEnd={() => { isResizingRef.current = false }}
+                                className={cn(
+                                    "absolute w-3 h-3 bg-white border border-primary z-50",
+                                    dir === 'top-left' && "-top-1.5 -left-1.5 cursor-nw-resize",
+                                    dir === 'top-right' && "-top-1.5 -right-1.5 cursor-ne-resize",
+                                    dir === 'bottom-left' && "-bottom-1.5 -left-1.5 cursor-sw-resize",
+                                    dir === 'bottom-right' && "-bottom-1.5 -right-1.5 cursor-se-resize",
+                                    dir === 'top' && "-top-1.5 left-1/2 -translate-x-1/2 cursor-n-resize h-1.5 w-6 rounded-full",
+                                    dir === 'bottom' && "-bottom-1.5 left-1/2 -translate-x-1/2 cursor-s-resize h-1.5 w-6 rounded-full",
+                                    dir === 'left' && "-left-1.5 top-1/2 -translate-y-1/2 cursor-w-resize w-1.5 h-6 rounded-full",
+                                    dir === 'right' && "-right-1.5 top-1/2 -translate-y-1/2 cursor-e-resize w-1.5 h-6 rounded-full",
+                                )}
+                            />
+                        ))}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 border-2 border-primary animate-pulse pointer-events-none"
+                        />
+                    </>
                 )}
             </AnimatePresence>
         </motion.div>
     )
-}
-
-function cn(...classes: (string | boolean | undefined)[]) {
-    return classes.filter(Boolean).join(" ")
 }

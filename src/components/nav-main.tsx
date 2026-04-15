@@ -17,14 +17,12 @@ import {
 
 export function NavMain({
   items,
-  isAdmin,
 }: {
   items: {
     title: string
     url: string
     icon?: Icon
   }[]
-  isAdmin?: boolean
 }) {
   const pathname = usePathname()
 

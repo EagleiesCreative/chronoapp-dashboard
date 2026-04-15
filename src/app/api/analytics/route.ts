@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
+import { deduplicatePayments } from "@/lib/utils"
 
 interface Payment {
     id: string
+    xendit_invoice_id?: string
     amount: number
     status: string
     created_at: string
+    updated_at: string
 }
 
 // Statistical helper functions
@@ -98,7 +101,9 @@ export async function GET() {
             return NextResponse.json({ error: "Failed to fetch analytics" }, { status: 500 })
         }
 
-        const allPayments = (payments || []) as Payment[]
+        const rawPayments = (payments || []) as Payment[]
+        const allPayments = deduplicatePayments(rawPayments)
+        
         const paidPayments = allPayments.filter(p =>
             p.status?.toUpperCase() === 'PAID' || p.status?.toUpperCase() === 'SETTLED'
         )
@@ -198,12 +203,19 @@ export async function GET() {
         const prev7Revenue = prev7Days.reduce((s, p) => s + p.amount, 0)
         const revenueGrowth = prev7Revenue > 0 ? ((last7Revenue - prev7Revenue) / prev7Revenue) * 100 : 0
 
+        const expiredPayments = allPayments.filter(p => {
+            const s = p.status?.toUpperCase()
+            return s === 'EXPIRED' || s === 'FAILED'
+        })
+        // Exclude PENDING from denominator — they are Xendit artifacts, not real outcomes
+        const finalizedCount = paidPayments.length + expiredPayments.length
+
         return NextResponse.json({
             summary: {
-                totalTransactions: allPayments.length,
+                totalTransactions: paidPayments.length,
                 paidTransactions: paidPayments.length,
                 totalRevenue,
-                successRate: allPayments.length > 0 ? (paidPayments.length / allPayments.length) * 100 : 0
+                successRate: finalizedCount > 0 ? (paidPayments.length / finalizedCount) * 100 : 0
             },
             transactionStats: {
                 mean: Math.round(mean),

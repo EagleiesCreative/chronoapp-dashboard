@@ -6,7 +6,6 @@ import { Search, Bell, CircleUser, FileText } from "lucide-react"
 const routeTitles: Record<string, string> = {
   "/dashboard": "Dashboard",
   "/dashboard/booths": "Booth Management",
-  "/dashboard/members": "Members",
   "/dashboard/device-status": "Device Status",
   "/dashboard/gallery": "Gallery",
   "/dashboard/analytics": "Analytics",

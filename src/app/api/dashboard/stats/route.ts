@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
 import { supabase } from "@/lib/supabase-server"
+import { deduplicatePayments } from "@/lib/utils"
 
 interface SupabasePayment {
     id: string
@@ -60,7 +61,8 @@ export async function GET() {
         let expiredCount = 0
         const dailyRevenue: Record<string, number> = {}
 
-        const paymentsList = (payments || []) as SupabasePayment[]
+        const rawPaymentsList = (payments || []) as SupabasePayment[]
+        const paymentsList = deduplicatePayments(rawPaymentsList)
 
         paymentsList.forEach((payment) => {
             const status = payment.status?.toUpperCase() || 'PENDING'
@@ -80,8 +82,10 @@ export async function GET() {
             }
         })
 
-        // Calculate success rate
-        const totalTransactions = paymentsList.length
+        // Calculate success rate — exclude PENDING from denominator
+        // Xendit creates a separate PAID record instead of updating PENDING,
+        // so orphaned PENDING records are artifacts, not failed transactions.
+        const totalTransactions = paidCount + expiredCount
         const successRate = totalTransactions > 0
             ? Math.round((paidCount / totalTransactions) * 100)
             : 0

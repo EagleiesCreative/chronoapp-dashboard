@@ -5,6 +5,7 @@ import { generateExcelReport } from "@/lib/excel-generator"
 import { generatePDFReport } from "@/lib/pdf-generator"
 import { uploadReport } from "@/lib/r2-storage"
 import type { ReportData } from "@/lib/excel-generator"
+import { deduplicatePayments } from "@/lib/utils"
 
 // GET - List all reports for the organization
 export async function GET(req: NextRequest) {
@@ -168,16 +169,15 @@ async function generateReportAsync(
         // If no booths, return empty logic (short circuit)
         let payments: any[] = []
         if (boothIds.length > 0) {
-            // 2. Fetch payments for these booths - only PAID/SETTLED
+            // 2. Fetch payments for these booths - all statuses
             const { data, error } = await supabase
                 .from('payments')
                 .select('*')
                 .in('booth_id', boothIds)
-                .in('status', ['PAID', 'SETTLED', 'paid', 'settled']) // Only include completed payments
                 .gte('created_at', periodStart)
                 .lte('created_at', periodEnd)
                 .order('created_at', { ascending: false })
-                .limit(maxTransactions)
+                .limit(maxTransactions * 2) // increase limit to account for duplicates
 
             if (error) throw error
             payments = data || []
@@ -188,9 +188,13 @@ async function generateReportAsync(
 
         if (paymentsError) throw paymentsError
 
-        const allPayments = payments || []
-        // All fetched payments are already paid/settled
-        const paidPayments = allPayments
+        const rawPayments = payments || []
+        const allPayments = deduplicatePayments(rawPayments)
+        
+        // Filter paid/settled payments
+        const paidPayments = allPayments.filter(p => 
+            p.status?.toUpperCase() === 'PAID' || p.status?.toUpperCase() === 'SETTLED'
+        )
 
         // Calculate analytics
         const paidAmounts = paidPayments.map(p => p.amount)
@@ -240,12 +244,18 @@ async function generateReportAsync(
         // Performance (simplified - compare with previous period)
         const totalRevenue = paidAmounts.reduce((s, v) => s + v, 0)
 
+        const expiredPayments = allPayments.filter(p => {
+            const s = p.status?.toUpperCase()
+            return s === 'EXPIRED' || s === 'FAILED'
+        })
+        const finalizedCount = paidPayments.length + expiredPayments.length
+
         const reportData: ReportData = {
             summary: {
                 totalRevenue,
-                totalTransactions: allPayments.length,
+                totalTransactions: paidPayments.length,
                 paidTransactions: paidPayments.length,
-                successRate: allPayments.length > 0 ? (paidPayments.length / allPayments.length) * 100 : 0,
+                successRate: finalizedCount > 0 ? (paidPayments.length / finalizedCount) * 100 : 0,
                 periodStart,
                 periodEnd,
             },

@@ -66,7 +66,7 @@ export async function hasBoothFeature(boothId: string, orgId: string, feature: F
                 const expiresAt = new Date(subscription.subscription_expires_at)
                 if (expiresAt < new Date()) {
                     // Expired, downgrade strictly to growth features immediately
-                    return PLANS['growth'].features[feature as keyof typeof PLANS['growth']['features']] === true
+                    return Boolean(PLANS['growth'].features[feature as keyof typeof PLANS['growth']['features']])
                 }
             } else if (subscription.subscription_status !== 'cancelled') {
                 return false // Suspended or payment pending - fallback to False.
