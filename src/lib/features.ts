@@ -56,27 +56,37 @@ export async function hasBoothFeature(boothId: string, orgId: string, feature: F
         const subscription = await getBoothSubscription(boothId, orgId)
         if (!subscription) return false
 
-        // Feature mapping based on new pricing plans
-        const plan = PLANS[(subscription.subscription_plan as PlanId) || 'growth']
-        
-        // Active checking
-        if (subscription.subscription_status !== 'active') {
-            // Cancelled but not expired? Still active until expiry.
-            if (subscription.subscription_status === 'cancelled' && subscription.subscription_expires_at) {
-                const expiresAt = new Date(subscription.subscription_expires_at)
-                if (expiresAt < new Date()) {
-                    // Expired, downgrade strictly to growth features immediately
-                    return Boolean(PLANS['growth'].features[feature as keyof typeof PLANS['growth']['features']])
-                }
-            } else if (subscription.subscription_status !== 'cancelled') {
-                return false // Suspended or payment pending - fallback to False.
+        // ── Expiry check: runs FIRST regardless of status string ───────────────
+        // Fixes the bug where status='active' + expires_at in the past still
+        // granted full feature access. The cron runs nightly, but during the day
+        // we must check expiry here too to close the window.
+        if (subscription.subscription_expires_at) {
+            const expiresAt = new Date(subscription.subscription_expires_at)
+            if (expiresAt < new Date()) {
+                // Expired — fall back to growth features no matter what status says
+                const growthFeatures = PLANS['growth'].features
+                return Boolean(growthFeatures[feature as keyof typeof growthFeatures])
             }
         }
 
-        // Map internal features to plan features
+        // ── Status check ────────────────────────────────────────────────────────
+        if (subscription.subscription_status === 'expired') {
+            // Already downgraded by cron — growth only
+            const growthFeatures = PLANS['growth'].features
+            return Boolean(growthFeatures[feature as keyof typeof growthFeatures])
+        }
+
+        if (subscription.subscription_status !== 'active' && subscription.subscription_status !== 'cancelled') {
+            // Suspended, payment_pending, etc. — no premium features
+            return false
+        }
+        // ───────────────────────────────────────────────────────────────────────
+
+        // Feature mapping based on pricing plans
+        const plan = PLANS[(subscription.subscription_plan as PlanId) || 'growth']
+
         switch (feature) {
             case FEATURES.VOUCHERS:
-                // Available via 'professional' implicitly or via addon
                 return subscription.addons?.includes('voucher-system') || plan.id !== 'growth'
             case FEATURES.ADVANCED_ANALYTICS:
                 return plan.features.advanced_analytics === true
@@ -87,13 +97,11 @@ export async function hasBoothFeature(boothId: string, orgId: string, feature: F
             case FEATURES.PRIORITY_SUPPORT:
                 return plan.features.priority_support === true
             case FEATURES.FILTERS:
-                // Available via Pro plan or via custom-filter addon
                 return subscription.addons?.includes('custom-filter') || plan.id !== 'growth'
             case FEATURES.LIVE_VIDEO:
                 return subscription.addons?.includes('live-mode-streaming') || false
             case FEATURES.MULTIPRINT:
             case FEATURES.PAPER_TRACKING:
-                // Assuming these are available to all plans for now, adjust as per business rules
                 return true
             default:
                 return false

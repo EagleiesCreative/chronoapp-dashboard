@@ -12,11 +12,12 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
         }
 
-        const { searchParams } = new URL(req.url)
-        const requestedOrgId = searchParams.get('orgId') || orgId
+        // Always use Clerk's authenticated orgId — never trust client-provided orgId.
+        // Accepting orgId from query string would allow any user to read any org's data.
+        const requestedOrgId = orgId
 
         if (!requestedOrgId) {
-            return NextResponse.json({ error: 'Organization ID required' }, { status: 400 })
+            return NextResponse.json({ error: 'No organization selected. Please switch to an organization.' }, { status: 400 })
         }
 
         // Fetch booths for this org to show their subscriptions
