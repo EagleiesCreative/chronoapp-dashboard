@@ -4,25 +4,6 @@ import { Suspense, useState, useEffect } from "react"
 import { useOrganization } from "@clerk/nextjs"
 import { useSearchParams } from "next/navigation"
 import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-    IconSparkles,
-    IconCheck,
-    IconCreditCard,
-    IconAlertTriangle,
-    IconClock,
-    IconExternalLink,
-    IconReceipt,
-    IconLoader,
-    IconX,
-    IconArrowUp,
-    IconArrowDown,
-    IconDeviceDesktop,
-    IconPlus,
-} from "@tabler/icons-react"
-import Link from "next/link"
 
 interface Booth {
     id: string
@@ -37,15 +18,8 @@ interface Plan {
     id: string
     name: string
     price: number
+    description?: string // added for the new UI or we hardcode
     features: Record<string, boolean>
-}
-
-interface Addon {
-    id: string
-    name: string
-    description: string
-    price: number
-    interval: string
 }
 
 interface SubscriptionHistory {
@@ -66,21 +40,33 @@ interface PendingInvoice {
     expiry_date: string
 }
 
+const fmt = (n: number) => "Rp " + n.toLocaleString("id-ID");
+
 function BillingContent() {
     const { organization } = useOrganization()
     const searchParams = useSearchParams()
+    
+    // Data states
     const [loading, setLoading] = useState(true)
     const [booths, setBooths] = useState<Booth[]>([])
     const [plans, setPlans] = useState<Plan[]>([])
-    const [addons, setAddons] = useState<Addon[]>([])
     const [history, setHistory] = useState<SubscriptionHistory[]>([])
     const [pendingInvoice, setPendingInvoice] = useState<PendingInvoice | null>(null)
-    const [processingItem, setProcessingItem] = useState<string | null>(null) // '{boothId}-{plan/addon}'
+    const [processingItem, setProcessingItem] = useState<string | null>(null)
+    
+    // UI states
+    const [tab, setTab] = useState("overview");
+    const [showCancelModal, setShowCancelModal] = useState<{show: boolean, booth: Booth|null}>({show: false, booth: null});
+    const [showUpgradeModal, setShowUpgradeModal] = useState<{show: boolean, plan: Plan|null, booth: Booth|null}>({show: false, plan: null, booth: null});
+    const [billing, setBilling] = useState("monthly");
+
+    const tabs = ["overview", "plans", "invoices", "payment method"];
 
     useEffect(() => {
         const paymentStatus = searchParams.get('payment')
         if (paymentStatus === 'success') {
             toast.success('Payment successful! Your purchase is being activated.')
+            // clean up url optionally here
         } else if (paymentStatus === 'failed') {
             toast.error('Payment failed or was cancelled. Please try again.')
         }
@@ -95,7 +81,6 @@ function BillingContent() {
                 const data = await res.json()
                 setBooths(data.booths || [])
                 setPlans(data.plans || [])
-                setAddons(data.addons || [])
                 setHistory(data.history || [])
                 setPendingInvoice(data.pendingInvoice || null)
             } catch (error) {
@@ -109,21 +94,14 @@ function BillingContent() {
         fetchData()
     }, [organization])
 
-    const handlePurchase = async (boothId: string, itemType: 'plan' | 'addon', itemId: string) => {
+    const handlePurchase = async (boothId: string, itemId: string) => {
         if (!organization) return
         
-        if (itemType === 'plan' && itemId === 'growth') {
-             if (!confirm('Are you sure you want to downgrade this booth to the Growth plan? Features will immediately become limited.')) return;
-        }
-
         const processingKey = `${boothId}-${itemId}`
         setProcessingItem(processingKey)
 
         try {
-            const body: any = { orgId: organization.id, boothId }
-            if (itemType === 'plan') body.planId = itemId
-            if (itemType === 'addon') body.addonId = itemId
-
+            const body: any = { orgId: organization.id, boothId, planId: itemId }
             const res = await fetch('/api/subscriptions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -149,15 +127,13 @@ function BillingContent() {
             toast.error('Failed to initiate purchase')
         } finally {
             setProcessingItem(null)
+            setShowUpgradeModal({show: false, plan: null, booth: null})
         }
     }
 
     const handleCancel = async (boothId: string) => {
         if (!organization) return
-        if (!confirm('Are you sure you want to cancel the paid subscription for this booth? It will revert to the Growth plan at the end of the billing period.')) {
-            return
-        }
-
+        
         try {
             const res = await fetch(`/api/subscriptions?boothId=${boothId}`, {
                 method: 'DELETE'
@@ -170,330 +146,452 @@ function BillingContent() {
         } catch (error) {
             console.error('Error cancelling:', error)
             toast.error('Failed to cancel subscription')
-        }
-    }
-
-    const getActionDisplay = (action: string) => {
-        if (action.includes('purchased_addon')) {
-             return { label: 'Add-on Purchased', icon: <IconPlus className="h-4 w-4 text-primary" />, color: 'text-primary' }
-        }
-        if (action.includes('upgraded')) {
-            return { label: 'Plan Upgraded', icon: <IconArrowUp className="h-4 w-4 text-green-500" />, color: 'text-green-600' }
-        }
-        if (action.includes('downgraded')) {
-             return { label: 'Plan Downgraded', icon: <IconArrowDown className="h-4 w-4 text-orange-500" />, color: 'text-orange-600' }
-        }
-        switch (action) {
-            case 'payment_initiated':
-                return { label: 'Payment Initiated', icon: <IconClock className="h-4 w-4 text-blue-500" />, color: 'text-blue-600' }
-            case 'payment_failed':
-                return { label: 'Payment Failed', icon: <IconAlertTriangle className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
-            case 'payment_expired':
-                return { label: 'Payment Expired', icon: <IconClock className="h-4 w-4 text-amber-500" />, color: 'text-amber-600' }
-            default:
-                if (action.includes('cancelled')) {
-                     return { label: 'Subscription Cancelled', icon: <IconX className="h-4 w-4 text-red-500" />, color: 'text-red-600' }
-                }
-                return { label: action, icon: <IconReceipt className="h-4 w-4 text-muted-foreground" />, color: 'text-muted-foreground' }
+        } finally {
+            setShowCancelModal({show: false, booth: null})
         }
     }
 
     if (loading) {
         return (
-            <div className="flex flex-col gap-6 p-4 md:p-6">
+            <div className="p-7">
                 <div className="animate-pulse space-y-6">
-                    <div className="h-8 bg-muted rounded w-48" />
-                    <div className="h-64 bg-muted rounded" />
+                    <div className="h-8 bg-[#ede9e3] rounded w-48" />
+                    <div className="h-64 bg-[#f8f5f1] rounded-xl" />
                 </div>
             </div>
         )
     }
 
+    // Default booth selection if any
+    const activeBooth = booths[0]
+    const currentPlan = activeBooth ? plans.find(p => p.id === (activeBooth.subscription_plan || 'growth')) || plans[0] : null
+    const isActivePlan = activeBooth && activeBooth.subscription_status !== 'cancelled'
+
+    // Formatting for display mock fallback data
+    const mockDetailedPlans = plans.map(p => {
+        const isCurrent = activeBooth ? p.id === activeBooth.subscription_plan || (p.id === 'growth' && !activeBooth.subscription_plan) : false
+        return {
+            ...p,
+            period: p.price === 0 ? "Free forever" : "per month",
+            desc: p.id === 'growth' ? "Perfect for getting started" : p.id === 'professional' ? "For growing studios" : "For large operations",
+            featuresList: Object.entries(p.features).filter(([_, v]) => v).map(([k]) => k.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())),
+            current: isCurrent,
+            cta: isCurrent ? "Current plan" : p.id === 'growth' ? "Downgrade" : "Upgrade"
+        }
+    })
+
     return (
-        <div className="flex flex-col gap-6 p-4 md:p-6">
-            <div>
-                <h1 className="text-2xl font-semibold tracking-tight">Billing & Subscriptions</h1>
-                <p className="text-sm text-muted-foreground">
-                    Manage plans and add-ons individually for your active booths.
-                </p>
+        <div className="p-7 max-w-[1200px] mx-auto w-full text-[#1a1a18]">
+            {/* Header */}
+            <div className="mb-6">
+                <div className="text-[20px] font-semibold tracking-[-0.4px]">Billing</div>
+                <div className="text-[13.5px] text-[#9a9288] mt-[3px]">Manage your subscription, invoices, and payment method of {organization?.name}</div>
             </div>
 
-            {/* Pending Payment Banner */}
+            {/* Pending Invoice Warning */}
             {pendingInvoice && (
-                <Card className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/30">
-                    <CardContent className="flex items-center justify-between py-4">
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900">
-                                <IconClock className="h-5 w-5 text-amber-600" />
-                            </div>
-                            <div>
-                                <p className="font-medium text-amber-800 dark:text-amber-200">
-                                    Payment Pending
-                                </p>
-                                <p className="text-sm text-amber-700 dark:text-amber-300">
-                                    Complete your payment of Rp {pendingInvoice.amount.toLocaleString('id-ID')}
-                                </p>
-                            </div>
+                <div className="mb-6 bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded bg-orange-100 flex items-center justify-center text-orange-600 font-bold">!</div>
+                        <div>
+                            <div className="text-[14px] font-semibold text-orange-800">Payment Pending</div>
+                            <div className="text-[13px] text-orange-700">Complete your active payment of {fmt(pendingInvoice.amount)}</div>
                         </div>
-                        <Button
-                            onClick={() => window.location.href = pendingInvoice.invoice_url}
-                            className="shrink-0"
-                        >
-                            <IconExternalLink className="mr-2 h-4 w-4" />
-                            Complete Payment
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
-
-            {/* Booth Mapping */}
-            {booths.length === 0 ? (
-                 <Card>
-                     <CardContent className="py-10 text-center">
-                         <IconDeviceDesktop className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
-                         <h3 className="text-lg font-medium">No Booths Found</h3>
-                         <p className="text-muted-foreground mb-4">Create a booth to start managing its subscription.</p>
-                         <Button asChild>
-                             <Link href="/dashboard/booths">Go to Booths</Link>
-                         </Button>
-                     </CardContent>
-                 </Card>
-            ) : (
-                <div className="space-y-6">
-                    {booths.map(booth => {
-                        const currentPlan = plans.find(p => p.id === (booth.subscription_plan || 'growth')) || plans[0]
-                        const isPro = currentPlan.id !== 'growth'
-                        const isCancelled = booth.subscription_status === 'cancelled'
-                        const boothAddons = addons.filter(a => booth.addons?.includes(a.id))
-                        const availableAddons = addons.filter(a => !booth.addons?.includes(a.id))
-
-                        return (
-                             <Card key={booth.id} className={isPro ? "border-primary/50 overflow-hidden" : "overflow-hidden"}>
-                                {isPro && (
-                                     <div className="bg-primary h-1 w-full" />
-                                )}
-                                <CardHeader className="pb-2">
-                                     <div className="flex items-start justify-between">
-                                         <div>
-                                             <CardTitle className="flex items-center gap-2 text-xl">
-                                                 {booth.name}
-                                                 {isPro && <IconSparkles className="h-5 w-5 text-primary" />}
-                                             </CardTitle>
-                                             <CardDescription className="mt-1">
-                                                 {currentPlan.name} Plan
-                                             </CardDescription>
-                                         </div>
-                                         <Badge variant={isCancelled ? "destructive" : isPro ? "default" : "secondary"} className="uppercase tracking-wider text-[10px] font-semibold">
-                                             {isCancelled ? "Cancelled" : (isPro ? "Premium" : "Free")}
-                                         </Badge>
-                                     </div>
-                                </CardHeader>
-                                <CardContent className="pt-6">
-                                     <div className="flex flex-col md:flex-row gap-8">
-                                         {/* Main Info */}
-                                         <div className="flex-1 space-y-4">
-                                             <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Plan Details</h4>
-                                             <div className="flex flex-wrap gap-x-12 gap-y-4">
-                                                <div className="space-y-1">
-                                                    <p className="text-xs text-muted-foreground">Price</p>
-                                                    <p className="text-sm font-medium">
-                                                        {currentPlan.price === 0 ? 'Free' : `Rp ${currentPlan.price.toLocaleString('id-ID')}/mo`}
-                                                    </p>
-                                                </div>
-                                                {booth.subscription_expires_at && (
-                                                    <div className="space-y-1">
-                                                        <p className="text-xs text-muted-foreground">
-                                                            {isCancelled ? 'Access Until' : 'Next Billing'}
-                                                        </p>
-                                                        <p className="text-sm font-medium">
-                                                            {new Date(booth.subscription_expires_at).toLocaleDateString('id-ID')}
-                                                        </p>
-                                                    </div>
-                                                )}
-                                             </div>
-
-                                             {boothAddons.length > 0 && (
-                                                  <div className="pt-2">
-                                                      <p className="text-xs text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Active Add-ons</p>
-                                                      <div className="flex flex-wrap gap-2">
-                                                           {boothAddons.map(a => (
-                                                                <Badge key={a.id} variant="secondary" className="font-normal border">
-                                                                    <IconCheck className="w-3 h-3 mr-1 text-primary" /> {a.name}
-                                                                </Badge>
-                                                           ))}
-                                                      </div>
-                                                  </div>
-                                             )}
-                                         </div>
-                                         
-                                         {/* Allowed Features Snippet */}
-                                         <div className="flex-1 space-y-4 md:border-l md:pl-8 border-border">
-                                              <h4 className="font-semibold text-xs text-muted-foreground uppercase tracking-wider">Included Features</h4>
-                                              <ul className="grid grid-cols-1 gap-2 text-sm">
-                                                  {Object.entries(currentPlan.features).map(([key, val]) => val && (
-                                                      <li key={key} className="flex items-center gap-2 text-muted-foreground">
-                                                          <IconCheck className="w-4 h-4 text-primary" />
-                                                          <span>{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
-                                                      </li>
-                                                  ))}
-                                              </ul>
-                                         </div>
-                                     </div>
-                                </CardContent>
-                                <CardFooter className="pt-2 pb-6 flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-                                     <div className="flex flex-wrap gap-2">
-                                         {/* Plan upgrades */}
-                                         {plans.map(p => {
-                                             if (p.id === currentPlan.id) return null;
-                                             // Only show upgrade to pro or panoramic
-                                             if (currentPlan.id === 'growth' && p.id !== 'growth') {
-                                                 return (
-                                                     <Button 
-                                                        key={p.id} 
-                                                        variant={p.id === 'professional' ? 'default' : 'outline'} 
-                                                        size="sm"
-                                                        onClick={() => handlePurchase(booth.id, 'plan', p.id)}
-                                                        disabled={!!processingItem || !!pendingInvoice}
-                                                     >
-                                                         {processingItem === `${booth.id}-${p.id}` ? <IconLoader className="h-4 w-4 mr-2 animate-spin" /> : <IconArrowUp className="h-4 w-4 mr-1"/>}
-                                                         Upgrade to {p.name}
-                                                     </Button>
-                                                 )
-                                             }
-                                             // If Pro, show downgrade to Growth or upgrade to panoramic
-                                             if (currentPlan.id === 'professional') {
-                                                 if (p.id === 'panoramic-plus') {
-                                                     return (
-                                                         <Button 
-                                                            key={p.id} 
-                                                            variant="outline" 
-                                                            size="sm"
-                                                            onClick={() => handlePurchase(booth.id, 'plan', p.id)}
-                                                            disabled={!!processingItem || !!pendingInvoice}
-                                                         >
-                                                             {processingItem === `${booth.id}-${p.id}` ? <IconLoader className="h-4 w-4 mr-2 animate-spin" /> : <IconArrowUp className="h-4 w-4 mr-1"/>}
-                                                             Upgrade
-                                                         </Button>
-                                                     )
-                                                 }
-                                             }
-                                             // Provide general cancel button instead of manual downgrade
-                                             return null;
-                                         })}
-
-                                         {isPro && !isCancelled && (
-                                             <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" size="sm" onClick={() => handleCancel(booth.id)}>
-                                                 Cancel Plan
-                                             </Button>
-                                         )}
-                                     </div>
-                                     
-                                     {/* Addons Box */}
-                                     {availableAddons.length > 0 && isPro && (
-                                          <div className="flex flex-wrap gap-2 items-center">
-                                              <span className="text-xs text-muted-foreground mr-1 uppercase tracking-wider font-semibold">Available Add-ons:</span>
-                                              {availableAddons.map(a => (
-                                                  <Button 
-                                                      key={a.id} 
-                                                      variant="secondary" 
-                                                      size="sm"
-                                                      onClick={() => handlePurchase(booth.id, 'addon', a.id)}
-                                                      disabled={!!processingItem || !!pendingInvoice}
-                                                      title={`Rp ${a.price.toLocaleString('id-ID')} (One-time)`}
-                                                  >
-                                                      {processingItem === `${booth.id}-${a.id}` ? <IconLoader className="h-4 w-4 mr-1 animate-spin" /> : <IconPlus className="h-3 w-3 mr-1" />}
-                                                      {a.name}
-                                                  </Button>
-                                              ))}
-                                          </div>
-                                     )}
-                                     {!isPro && availableAddons.length > 0 && (
-                                          <p className="text-xs text-muted-foreground">Upgrade to purchase add-ons.</p>
-                                     )}
-                                </CardFooter>
-                             </Card>
-                        )
-                    })}
+                    </div>
+                    <button 
+                        onClick={() => window.location.href = pendingInvoice.invoice_url}
+                        className="bg-orange-600 text-white border-none rounded-lg px-4 py-2 text-[13px] font-medium cursor-pointer hover:bg-orange-700"
+                    >
+                        Pay Now
+                    </button>
                 </div>
             )}
 
-            {/* Payment Method */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <IconCreditCard className="h-5 w-5" />
-                        Base Payment Methods
-                    </CardTitle>
-                    <CardDescription>
-                        Supported infrastructure
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <p className="text-muted-foreground">
-                        Payments are processed securely via Xendit. We support bank transfer (BCA, BNI, BRI, Mandiri), e-wallet (OVO, DANA, GoPay), QRIS, and credit cards.
-                    </p>
-                </CardContent>
-            </Card>
+            {/* Tabs */}
+            <div className="flex gap-[2px] mb-6 border-b border-[#ede9e3]">
+                {tabs.map(t => (
+                    <button 
+                        key={t} 
+                        onClick={() => setTab(t)} 
+                        className={`h-[36px] px-[14px] bg-transparent border-none cursor-pointer capitalize text-[13.5px] -mb-[1px] ${
+                            tab === t 
+                                ? 'border-b-2 border-[#2d1f10] text-[#1a1a18] font-medium' 
+                                : 'border-b-2 border-transparent text-[#9a9288] font-normal hover:text-[#1a1a18]'
+                        }`}
+                    >
+                        {t}
+                    </button>
+                ))}
+            </div>
 
-            {/* Billing History */}
-            {history.length > 0 && (
-                <Card>
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2">
-                            <IconReceipt className="h-5 w-5" />
-                            Billing History
-                        </CardTitle>
-                        <CardDescription>
-                            Your recent subscription activity across all booths
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="divide-y divide-border">
-                            {history.map((entry) => {
-                                const display = getActionDisplay(entry.action)
-                                return (
-                                    <div
-                                        key={entry.id}
-                                        className="flex items-center justify-between py-3"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-muted/50 rounded-full border border-border">
-                                                {display.icon}
+            {/* ── OVERVIEW TAB ── */}
+            {tab === "overview" && (
+                <div className="flex flex-col gap-4">
+                    {booths.length === 0 ? (
+                        <div className="bg-[#fff] border border-[#ede9e3] rounded-[14px] p-8 text-center">
+                            <div className="text-[15px] font-medium mb-1">No Booths Found</div>
+                            <div className="text-[13px] text-[#9a9288]">Create a booth first to manage subscriptions.</div>
+                        </div>
+                    ) : (
+                        booths.map(booth => {
+                            const bPlan = plans.find(p => p.id === (booth.subscription_plan || 'growth')) || plans[0]
+                            const bActive = booth.subscription_status !== 'cancelled'
+                            const bMockFeatures = mockDetailedPlans.find(m => m.id === bPlan.id)?.featuresList || []
+
+                            const expiryDate = booth.subscription_expires_at 
+                                ? new Date(booth.subscription_expires_at) 
+                                : new Date(new Date().setFullYear(new Date().getFullYear() + 1));
+
+                            return (
+                                <div key={booth.id} className="flex flex-col gap-4 mb-8 last:mb-0">
+                                    <div className="text-[14px] font-semibold text-[#6b6358] uppercase tracking-[0.05em] mb-[-4px] ml-1">{booth.name}</div>
+                                    
+                                    {/* Current plan banner */}
+                                    <div className="bg-[#fff] border border-[#ede9e3] rounded-[14px] px-6 py-[22px] flex items-center justify-between flex-wrap gap-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-[44px] h-[44px] rounded-xl bg-[#f5f0ea] flex items-center justify-center shrink-0">
+                                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#6b4f2a" strokeWidth="1.5" strokeLinecap="round">
+                                                    <path d="M3 6h14v10H3zM3 9.5h14M7 6V4a3 3 0 016 0v2" />
+                                                </svg>
                                             </div>
                                             <div>
-                                                <p className={`text-sm font-medium ${display.color}`}>
-                                                    {display.label}
-                                                    {entry.action.includes('_') && !['payment_initiated', 'payment_failed', 'payment_expired'].includes(entry.action) && (
-                                                         <span className="text-muted-foreground font-normal ml-2">
-                                                             ({entry.action.split('_').pop()})
-                                                         </span>
-                                                    )}
-                                                </p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {new Date(entry.created_at).toLocaleDateString('id-ID', {
-                                                        day: 'numeric',
-                                                        month: 'long',
-                                                        year: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    })}
-                                                </p>
+                                                <div className="flex items-center gap-2 mb-[2px]">
+                                                    <span className="text-[15px] font-semibold">{bPlan.name} plan</span>
+                                                    <span className={`text-[11px] font-medium px-2 py-[2px] rounded-[20px] ${bActive ? 'bg-[#dcfce7] text-[#15803d]' : 'bg-[#fee2e2] text-[#dc2626]'}`}>
+                                                        {bActive ? 'Active' : 'Cancelled'}
+                                                    </span>
+                                                </div>
+                                                <div className="text-[13px] text-[#9a9288]">
+                                                    {bPlan.price === 0 ? 'Free' : `${fmt(bPlan.price)} / month`}
+                                                    {` · ${bActive ? 'Renews' : 'Expires'} ${expiryDate.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                                                </div>
                                             </div>
                                         </div>
-                                        {entry.amount > 0 && (
-                                            <span className="text-sm font-mono font-medium flex flex-col items-end">
-                                                Rp {Number(entry.amount).toLocaleString('id-ID')}
-                                                {entry.plan_id && <span className="text-[10px] text-muted-foreground uppercase mt-0.5">{entry.plan_id}</span>}
-                                            </span>
-                                        )}
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => setTab("plans")} 
+                                                className="h-[32px] px-[14px] rounded-md bg-[#2d1f10] text-[#fff] border-none text-[13px] font-medium cursor-pointer"
+                                            >
+                                                Change plan
+                                            </button>
+                                            {bPlan.id !== 'growth' && bActive && (
+                                                <button 
+                                                    onClick={() => setShowCancelModal({show: true, booth})} 
+                                                    className="h-[32px] px-[14px] rounded-md bg-transparent text-[#dc2626] border border-[#fecaca] text-[13px] cursor-pointer hover:bg-[#fef2f2]"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                )
-                            })}
-                        </div>
-                    </CardContent>
-                </Card>
+
+                                    {/* Usage stats (Mock data integration layout) */}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        {[
+                                            { label: "Devices used", val: "1 / 5", pct: 20, color: "#2d1f10" },
+                                            { label: "Storage used", val: "2.1 GB / 10 GB", pct: 21, color: "#2563eb" },
+                                            { label: "Sessions this month", val: "445 / unlimited", pct: null, color: "#16a34a" },
+                                        ].map(u => (
+                                            <div key={u.label} className="bg-[#fff] border border-[#ede9e3] rounded-xl px-[18px] py-4">
+                                                <div className="text-[11.5px] text-[#b0a898] uppercase tracking-[0.07em] mb-2">{u.label}</div>
+                                                <div className={`text-[16px] font-semibold ${u.pct != null ? 'mb-[10px]' : 'mb-0'}`}>{u.val}</div>
+                                                {u.pct != null && (
+                                                    <div className="h-1 rounded bg-[#f0ece6] overflow-hidden">
+                                                        <div className="h-full rounded" style={{ width: `${u.pct}%`, backgroundColor: u.color }} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Plan features */}
+                                    <div className="bg-[#fff] border border-[#ede9e3] rounded-[14px] px-6 py-5">
+                                        <div className="text-[14px] font-semibold mb-[14px]">Included in your plan</div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-[10px]">
+                                            {bMockFeatures.map((f: string) => (
+                                                <div key={f} className="flex items-center gap-2 text-[13.5px] text-[#3a3330]">
+                                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round">
+                                                        <path d="M2 7l3.5 3.5L12 3.5" />
+                                                    </svg>
+                                                    {f}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )
+                        })
+                    )}
+                </div>
             )}
 
+            {/* ── PLANS TAB ── */}
+            {tab === "plans" && (
+                <div>
+                    <div className="flex items-center justify-center gap-[10px] mb-7">
+                        <span className={`text-[13.5px] ${billing === "monthly" ? "text-[#1a1a18] font-medium" : "text-[#9a9288] font-normal"}`}>Monthly</span>
+                        <div 
+                            onClick={() => setBilling(b => b === "monthly" ? "yearly" : "monthly")}
+                            className={`w-[42px] h-[24px] rounded-full cursor-pointer flex items-center px-[3px] transition-colors ${billing === "yearly" ? "bg-[#2d1f10]" : "bg-[#ddd]"}`}
+                        >
+                            <div className={`w-[18px] h-[18px] rounded-full bg-[#fff] transition-transform duration-200 ${billing === "yearly" ? "translate-x-[18px]" : "translate-x-0"}`} />
+                        </div>
+                        <span className={`text-[13.5px] flex items-center ${billing === "yearly" ? "text-[#1a1a18] font-medium" : "text-[#9a9288] font-normal"}`}>
+                            Yearly <span className="text-[11.5px] px-[7px] py-[1px] rounded-[10px] bg-[#dcfce7] text-[#15803d] ml-1">Save 20%</span>
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {mockDetailedPlans.map(plan => (
+                            <div key={plan.id} className={`bg-[#fff] rounded-[14px] p-6 flex flex-col relative ${plan.current ? 'border-2 border-[#2d1f10]' : 'border border-[#ede9e3]'}`}>
+                                {plan.current && (
+                                    <div className="absolute -top-[1px] right-4 text-[11px] font-medium px-[10px] py-[3px] bg-[#2d1f10] text-[#fff] rounded-b-lg">
+                                        Current
+                                    </div>
+                                )}
+                                <div className="text-[15px] font-semibold mb-1">{plan.name}</div>
+                                <div className="text-[12.5px] text-[#9a9288] mb-4">{plan.desc}</div>
+                                <div className="mb-5">
+                                    <span className="text-[26px] font-bold tracking-[-0.5px]">
+                                        {plan.price === 0 ? "Free" : fmt(billing === "yearly" ? Math.round(plan.price * 0.8) : plan.price)}
+                                    </span>
+                                    {plan.price > 0 && <span className="text-[12.5px] text-[#9a9288] ml-1">/ mo</span>}
+                                </div>
+                                <div className="flex-1 flex flex-col gap-2 mb-5">
+                                    {plan.featuresList.map((f: string) => (
+                                        <div key={f} className="flex items-start gap-[7px] text-[13px] text-[#3a3330]">
+                                            <svg className="shrink-0 mt-[2px]" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke={plan.current ? "#2d1f10" : "#16a34a"} strokeWidth="2" strokeLinecap="round">
+                                                <path d="M2 6.5l3 3L11 3" />
+                                            </svg>
+                                            {f}
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => { 
+                                        if (!plan.current && plan.id !== "growth") { 
+                                            window.open("https://framrstudio.com/billing", "_blank"); 
+                                        } 
+                                    }}
+                                    className={`w-full h-[36px] rounded-lg text-[13.5px] font-medium border ${
+                                        plan.current 
+                                            ? "bg-[#f5f0ea] text-[#6b4f2a] border-transparent cursor-default" 
+                                            : plan.id === "professional" 
+                                                ? "bg-[#2d1f10] text-[#fff] border-transparent cursor-pointer" 
+                                                : "bg-[#fff] text-[#1a1a18] border-[#ede9e3] cursor-pointer"
+                                    }`}
+                                >
+                                    {plan.cta}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── Cancel Subscription Section ── */}
+                    {activeBooth && activeBooth.subscription_plan && activeBooth.subscription_plan !== 'growth' && activeBooth.subscription_status !== 'cancelled' && (
+                        <div className="mt-8 border border-[#fecaca] rounded-[14px] px-6 py-5 bg-[#fff]">
+                            <div className="flex items-start justify-between gap-4 flex-wrap">
+                                <div>
+                                    <div className="text-[14px] font-semibold text-[#dc2626] mb-[5px]">Cancel subscription</div>
+                                    <div className="text-[13px] text-[#9a9288] leading-[1.6] max-w-[480px]">
+                                        Cancelling won&apos;t charge you again. You&apos;ll keep full access until your current period ends
+                                        {activeBooth.subscription_expires_at && (
+                                            <> on <span className="font-medium text-[#3a3330]">{new Date(activeBooth.subscription_expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span></>
+                                        )}, then your booth will revert to the free Growth plan.
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowCancelModal({ show: true, booth: activeBooth })}
+                                    className="h-[34px] px-[16px] shrink-0 rounded-lg bg-transparent text-[#dc2626] border border-[#fecaca] text-[13px] font-medium cursor-pointer hover:bg-[#fef2f2] transition-colors"
+                                >
+                                    Cancel subscription
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Already cancelled notice */}
+                    {activeBooth && activeBooth.subscription_status === 'cancelled' && activeBooth.subscription_plan !== 'growth' && (
+                        <div className="mt-8 border border-[#ede9e3] rounded-[14px] px-6 py-5 bg-[#faf8f5]">
+                            <div className="text-[13.5px] text-[#6b6358] leading-[1.6]">
+                                <span className="inline-flex items-center gap-[6px] font-medium text-[#dc2626] mb-1">
+                                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round"><circle cx="6.5" cy="6.5" r="5.5"/><path d="M6.5 4v3M6.5 9h.01"/></svg>
+                                    Subscription cancelled
+                                </span>
+                                <br />
+                                Your plan is cancelled but you retain access until{' '}
+                                {activeBooth.subscription_expires_at
+                                    ? <strong>{new Date(activeBooth.subscription_expires_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</strong>
+                                    : 'end of billing period'
+                                }. No further charges will be made.
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ── INVOICES TAB ── */}
+            {tab === "invoices" && (
+                <div className="bg-[#fff] border border-[#ede9e3] rounded-[14px] overflow-hidden">
+                    <div className="px-5 py-[14px] border-b border-[#f0ece6] flex justify-between items-center bg-[#fff]">
+                        <div className="text-[14px] font-semibold">All invoices</div>
+                        <button className="h-[30px] px-3 rounded-md border border-[#ede9e3] bg-[#fff] text-[12.5px] text-[#6b6358] cursor-pointer flex items-center gap-[5px] hover:bg-[#faf8f5]">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                                <path d="M8 2v10M4 9l4 4 4-4M2 14h12" />
+                            </svg>
+                            Export all
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto w-full">
+                        <table className="w-full border-collapse">
+                            <thead>
+                                <tr className="border-b border-[#f0ece6]">
+                                    {["Invoice", "Description", "Amount", "Date", "Status", ""].map(h => (
+                                        <th key={h} className="px-5 py-[9px] text-[11px] font-semibold text-[#b0a898] text-left tracking-[0.07em] uppercase whitespace-nowrap">
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {history.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="text-center py-6 text-[13px] text-[#9a9288]">No billing history available yet.</td>
+                                    </tr>
+                                ) : (
+                                    history.map((entry, i) => (
+                                        <tr key={entry.id} className={`hover:bg-[#faf8f5] transition-colors ${i < history.length - 1 ? 'border-b border-[#f8f5f1]' : ''}`}>
+                                            <td className="px-5 py-[13px]">
+                                                <span className="font-mono text-[12px] text-[#6b6358] bg-[#f5f2ee] px-[7px] py-[3px] rounded-md whitespace-nowrap">
+                                                    {entry.payment_id || entry.id.substring(0,8)}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-[13px] text-[13.5px] text-[#1a1a18] whitespace-nowrap capitalize">{entry.action.replace(/_/g, ' ')}</td>
+                                            <td className="px-5 py-[13px] text-[13.5px] font-medium whitespace-nowrap">{fmt(entry.amount)}</td>
+                                            <td className="px-5 py-[13px] text-[13px] text-[#6b6358] whitespace-nowrap">
+                                                {new Date(entry.created_at).toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })}
+                                            </td>
+                                            <td className="px-5 py-[13px]">
+                                                <span className={`text-[11.5px] px-[9px] py-[3px] rounded-full font-medium whitespace-nowrap ${entry.action.includes('failed') ? 'bg-[#fee2e2] text-[#dc2626]' : 'bg-[#dcfce7] text-[#15803d]'}`}>
+                                                    {entry.action.includes('failed') ? 'Failed' : 'Success'}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-[13px] text-right">
+                                                <button className="h-[26px] px-[10px] rounded-md border border-[#ede9e3] bg-[#fff] text-[12px] text-[#6b6358] cursor-pointer hover:bg-[#faf8f5]">Download</button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* ── PAYMENT METHOD TAB ── */}
+            {tab === "payment method" && (
+                <div className="flex flex-col gap-4 max-w-[560px]">
+                    <div className="bg-[#fff] border border-[#ede9e3] rounded-[14px] p-6">
+                        <div className="text-[14px] font-semibold mb-4">Current payment method</div>
+                        <div className="flex items-center justify-between p-[14px] px-4 border border-[#ede9e3] rounded-[10px] bg-[#faf8f5]">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-[26px] rounded-[5px] bg-[#e8ddd0] flex items-center justify-center shrink-0">
+                                    <svg width="18" height="14" viewBox="0 0 20 16" fill="none" stroke="#6b4f2a" strokeWidth="1.4" strokeLinecap="round">
+                                        <rect x="1" y="2" width="18" height="12" rx="2" />
+                                        <path d="M1 6h18" />
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div className="text-[13.5px] font-medium">QRIS — Bank Transfer</div>
+                                    <div className="text-[12px] text-[#b0a898] mt-[1px]">Provided by Xendit</div>
+                                </div>
+                            </div>
+                            <span className="text-[11.5px] px-2 py-[2px] rounded-[20px] bg-[#dcfce7] text-[#15803d] font-medium">Active</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-[#fff] border border-[#fecaca] rounded-[14px] px-6 py-[18px]">
+                        <div className="text-[14px] font-semibold mb-1 text-[#dc2626]">Danger zone</div>
+                        <div className="text-[13px] text-[#9a9288] mb-[14px]">Cancelling your plan will downgrade you to Growth at end of cycle.</div>
+                        <button 
+                            onClick={() => setShowCancelModal({show: true, booth: activeBooth})} 
+                            className="h-[34px] px-[14px] rounded-lg bg-transparent text-[#dc2626] border border-[#fecaca] text-[13px] cursor-pointer hover:bg-[#fef2f2]"
+                        >
+                            Cancel subscription
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Cancel Modal */}
+            {showCancelModal.show && showCancelModal.booth && (
+                <div className="fixed inset-0 bg-[#0000004d] flex items-center justify-center z-[100]">
+                    <div className="bg-[#fff] rounded-2xl p-7 w-[380px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="w-10 h-10 rounded-[10px] bg-[#fee2e2] flex items-center justify-center mb-[14px]">
+                            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#dc2626" strokeWidth="1.8" strokeLinecap="round">
+                                <path d="M9 3v6M9 12v.5M3 15L9 3l6 12H3z" />
+                            </svg>
+                        </div>
+                        <div className="text-[16px] font-semibold mb-[6px]">Cancel subscription?</div>
+                        <div className="text-[13.5px] text-[#6b6358] leading-[1.6] mb-[22px]">
+                            Your Premium plan on <strong>{showCancelModal.booth.name}</strong> will remain active until <strong>{showCancelModal.booth.subscription_expires_at ? new Date(showCancelModal.booth.subscription_expires_at).toLocaleDateString() : 'the end of cycle'}</strong>. After that, you'll be downgraded to the free Growth plan.
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setShowCancelModal({show: false, booth: null})} 
+                                className="flex-1 h-[36px] rounded-lg border border-[#ede9e3] bg-transparent text-[13.5px] text-[#6b6358] cursor-pointer hover:bg-[#faf8f5]"
+                            >
+                                Keep plan
+                            </button>
+                            <button 
+                                onClick={() => handleCancel(showCancelModal.booth!.id)} 
+                                className="flex-1 h-[36px] rounded-lg bg-[#dc2626] text-[#fff] border-none text-[13.5px] font-medium cursor-pointer hover:bg-[#b91c1c]"
+                            >
+                                Yes, cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Upgrade Modal */}
+            {showUpgradeModal.show && showUpgradeModal.plan && showUpgradeModal.booth && (
+                <div className="fixed inset-0 bg-[#0000004d] flex items-center justify-center z-[100]">
+                    <div className="bg-[#fff] rounded-2xl p-7 w-[380px] shadow-[0_20px_60px_rgba(0,0,0,0.15)] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="text-[16px] font-semibold mb-1">Upgrade {showUpgradeModal.booth.name} to {showUpgradeModal.plan.name}</div>
+                        <div className="text-[13.5px] text-[#6b6358] mb-5">
+                            You'll be billed {fmt(billing === "yearly" ? Math.round(showUpgradeModal.plan.price * 0.8) : showUpgradeModal.plan.price)} per month starting today.
+                        </div>
+                        <div className="bg-[#faf8f5] rounded-[10px] px-4 py-[14px] mb-5">
+                            {/* @ts-ignore - using the mock extension for display */}
+                            {showUpgradeModal.plan.featuresList?.map((f: string) => (
+                                <div key={f} className="flex items-center gap-[7px] text-[13px] text-[#3a3330] mb-2 last:mb-0">
+                                    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round">
+                                        <path d="M2 6.5l3 3L11 3" />
+                                    </svg>
+                                    {f}
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex gap-2">
+                            <button 
+                                onClick={() => setShowUpgradeModal({show: false, plan: null, booth: null})} 
+                                className="flex-1 h-[36px] rounded-lg border border-[#ede9e3] bg-transparent text-[13.5px] text-[#6b6358] cursor-pointer hover:bg-[#faf8f5]"
+                                disabled={processingItem !== null}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={() => handlePurchase(showUpgradeModal.booth!.id, showUpgradeModal.plan!.id)} 
+                                className="flex-1 h-[36px] rounded-lg bg-[#2d1f10] text-[#fff] border-none text-[13.5px] font-medium cursor-pointer hover:bg-[#1a1a18] flex items-center justify-center"
+                                disabled={processingItem !== null}
+                            >
+                                {processingItem !== null ? 'Processing...' : 'Confirm upgrade'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
@@ -501,10 +599,10 @@ function BillingContent() {
 export default function BillingPage() {
     return (
         <Suspense fallback={
-            <div className="flex flex-col gap-6 p-4 md:p-6">
+            <div className="p-7">
                 <div className="animate-pulse space-y-6">
-                    <div className="h-8 bg-muted rounded w-48" />
-                    <div className="h-64 bg-muted rounded" />
+                    <div className="h-8 bg-[#ede9e3] rounded w-48" />
+                    <div className="h-64 bg-[#f8f5f1] rounded-xl" />
                 </div>
             </div>
         }>

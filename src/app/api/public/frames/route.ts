@@ -21,10 +21,10 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Missing booth_token" }, { status: 401 })
         }
 
-        // 1. Verify booth by device_token
+        // 1. Verify booth by device_token — fetch subscription fields too
         const { data: booth, error: boothError } = await supabase
             .from("booths")
-            .select("id, organization_id, name, status, booth_id")
+            .select("id, organization_id, name, status, booth_id, subscription_plan, subscription_status, subscription_expires_at")
             .eq("device_token", boothToken)
             .single()
 
@@ -32,8 +32,33 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Invalid or unrecognized booth token" }, { status: 403 })
         }
 
-        if (booth.status !== "ACTIVE") {
+        // Case-insensitive active check
+        if (booth.status?.toUpperCase() !== "ACTIVE") {
             return NextResponse.json({ error: "Booth is not active" }, { status: 403 })
+        }
+
+        // 2. Subscription expiry enforcement
+        //    If the booth has a paid plan and its expiry date has passed, block access
+        //    and lazily downgrade the DB record so the next cron also picks it up cleanly.
+        const isPaidPlan = booth.subscription_plan && booth.subscription_plan !== "growth"
+        const hasExpired =
+            isPaidPlan &&
+            booth.subscription_expires_at &&
+            new Date(booth.subscription_expires_at) < new Date()
+
+        if (hasExpired) {
+            // Lazy downgrade — don't await, fire-and-forget so we don't slow down the response
+            supabase
+                .from("booths")
+                .update({ subscription_status: "expired", subscription_plan: "growth", subscription_expires_at: null })
+                .eq("id", booth.id)
+                .then(() => console.log(`/api/public/frames: lazily expired booth ${booth.id}`))
+                .catch((e) => console.error("/api/public/frames: lazy expiry update failed", e))
+
+            return NextResponse.json(
+                { error: "Subscription expired. Please renew your plan at framrstudio.com/billing" },
+                { status: 402 }
+            )
         }
 
         // 2. Build query: frames for this specific booth OR org-wide public frames

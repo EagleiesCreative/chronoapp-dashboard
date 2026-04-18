@@ -249,6 +249,19 @@ export async function DELETE(req: NextRequest) {
 
         // Delete DB records (only the verified IDs owned by this org)
         const verifiedIds = sessions.map((s: any) => s.id)
+
+        // 1. Nullify session_id in payments table first — required due to FK constraint
+        const { error: unlinkError } = await supabase
+            .from('payments')
+            .update({ session_id: null })
+            .in('session_id', verifiedIds)
+
+        if (unlinkError) {
+            console.error("Error unlinking payments before session deletion:", unlinkError)
+            // We continue anyway, as the delete below will catch if the FK error persists
+        }
+
+        // 2. Delete the session records
         const { error: deleteError } = await supabase
             .from('sessions')
             .delete()

@@ -171,6 +171,7 @@ export default function SettingsPage() {
                         <IconKey className="h-4 w-4" />
                         Security
                     </TabsTrigger>
+                </TabsList>
 
                 {/* ─────────────── PROFILE TAB ─────────────── */}
                 <TabsContent value="profile" className="space-y-6 mt-6">
@@ -417,7 +418,7 @@ export default function SettingsPage() {
                         </CardContent>
                     </Card>
                 </TabsContent>
-
+            </Tabs>
         </div>
     )
 }

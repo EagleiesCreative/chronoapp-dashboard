@@ -151,8 +151,6 @@ export default function EditBoothPage({ params }: { params: Promise<{ boothId: s
         }
     }
 
-    const assignableMembers = members.filter(m => m.role !== 'org:admin')
-
     if (loading) {
         return <div className="p-8">Loading...</div>
     }
